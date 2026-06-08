@@ -12,6 +12,7 @@ import com.company.vehiclevoice.audio.VirtualTtsPcmSource
 import com.company.vehiclevoice.data.MockRedisStore
 import com.company.vehiclevoice.data.VehicleStateProjector
 import com.company.vehiclevoice.kws.ScriptedKeywordSpotter
+import com.company.vehiclevoice.kws.VirtualPcmKeywordSpotter
 import com.company.vehiclevoice.log.EventLogSink
 import com.company.vehiclevoice.nlu.RuleIntentParser
 import com.company.vehiclevoice.template.ReplyTemplateEngine
@@ -61,7 +62,7 @@ object VoicePipelineFactory {
 
     fun createVirtualMicSmokePipeline(logSink: EventLogSink): VoicePipeline = createPipeline(
         audioSource = VirtualTtsPcmSource.singleCommand("打开空调"),
-        keywordSpotter = ScriptedKeywordSpotter(wakeSequences = setOf(5L)),
+        keywordSpotter = VirtualPcmKeywordSpotter(),
         logSink = logSink
     )
 
