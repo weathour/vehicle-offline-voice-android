@@ -34,3 +34,14 @@ Run after dependency/model changes:
 bash scripts/build_debug.sh
 bash scripts/check_apk_permissions.sh
 ```
+
+
+## Packaged asset evidence
+
+The first offline model asset has been packaged under:
+
+```text
+app/src/main/assets/model-cn
+```
+
+This directory contains `vosk-model-small-cn-0.22` extracted as `model-cn`. The runtime installer copies it to app-private storage before constructing Vosk `Model` instances. The APK permission guard still confirms no `INTERNET` permission after adding the Vosk AAR and model assets.

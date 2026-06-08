@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.IBinder
 import android.Manifest
 import android.content.pm.PackageManager
+import com.company.vehiclevoice.asr.VoskModelAssetInstaller
 import com.company.vehiclevoice.core.VoicePipelineController
 import com.company.vehiclevoice.core.VoicePipelineFactory
 import com.company.vehiclevoice.core.VoiceRuntimeMode
@@ -58,6 +59,11 @@ class VoiceForegroundService : Service() {
                 logSink = logSink,
                 realMicPermissionGranted = {
                     checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                },
+                voskModelPath = {
+                    runCatching { VoskModelAssetInstaller.ensureModelCopied(this).absolutePath }
+                        .onFailure { logSink.warn("Vosk model unavailable: ${it.message}") }
+                        .getOrNull()
                 }
             )
         },
