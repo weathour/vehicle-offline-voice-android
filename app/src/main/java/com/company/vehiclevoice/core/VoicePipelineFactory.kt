@@ -21,6 +21,7 @@ import com.company.vehiclevoice.log.EventLogSink
 import com.company.vehiclevoice.nlu.RuleIntentParser
 import com.company.vehiclevoice.template.ReplyTemplateEngine
 import com.company.vehiclevoice.tts.MockTtsEngine
+import com.company.vehiclevoice.tts.TtsEngine
 import com.company.vehiclevoice.vad.EnergyVadEngine
 
 object VoicePipelineFactory {
@@ -28,11 +29,12 @@ object VoicePipelineFactory {
         mode: VoiceRuntimeMode,
         logSink: EventLogSink,
         realMicPermissionGranted: () -> Boolean = { false },
-        voskModelPath: () -> String? = { null }
+        voskModelPath: () -> String? = { null },
+        ttsEngineFactory: () -> TtsEngine = { MockTtsEngine() }
     ): VoicePipeline = when (mode) {
         VoiceRuntimeMode.PreviewMock -> createServicePreviewPipeline(logSink)
-        VoiceRuntimeMode.VirtualMicSmoke -> createVirtualMicSmokePipeline(logSink)
-        VoiceRuntimeMode.RealMicManual -> createRealMicManualPipeline(logSink, realMicPermissionGranted, voskModelPath)
+        VoiceRuntimeMode.VirtualMicSmoke -> createVirtualMicSmokePipeline(logSink, ttsEngineFactory)
+        VoiceRuntimeMode.RealMicManual -> createRealMicManualPipeline(logSink, realMicPermissionGranted, voskModelPath, ttsEngineFactory)
     }
 
     fun createServicePreviewPipeline(logSink: EventLogSink): VoicePipeline {
@@ -65,17 +67,22 @@ object VoicePipelineFactory {
     }
 
 
-    fun createVirtualMicSmokePipeline(logSink: EventLogSink): VoicePipeline = createPipeline(
+    fun createVirtualMicSmokePipeline(
+        logSink: EventLogSink,
+        ttsEngineFactory: () -> TtsEngine = { MockTtsEngine() }
+    ): VoicePipeline = createPipeline(
         audioSource = VirtualTtsPcmSource.singleCommand("打开空调"),
         keywordSpotter = VirtualPcmKeywordSpotter(),
         asrEngine = VirtualPcmCommandAsrEngine(),
+        ttsEngine = ttsEngineFactory(),
         logSink = logSink
     )
 
     fun createRealMicManualPipeline(
         logSink: EventLogSink,
         realMicPermissionGranted: () -> Boolean,
-        voskModelPath: () -> String?
+        voskModelPath: () -> String?,
+        ttsEngineFactory: () -> TtsEngine = { MockTtsEngine() }
     ): VoicePipeline {
         val modelPath = voskModelPath()
         return if (modelPath != null) {
@@ -83,6 +90,7 @@ object VoicePipelineFactory {
                 audioSource = AndroidAudioRecordSource(permissionGranted = realMicPermissionGranted),
                 keywordSpotter = VoskKeywordSpotter(modelPath = modelPath),
                 asrEngine = VoskOfflineAsrEngine(modelPath = modelPath),
+                ttsEngine = ttsEngineFactory(),
                 logSink = logSink
             )
         } else {
@@ -90,6 +98,7 @@ object VoicePipelineFactory {
                 audioSource = AndroidAudioRecordSource(permissionGranted = realMicPermissionGranted),
                 keywordSpotter = ScriptedKeywordSpotter(wakeSequences = setOf(10L)),
                 asrEngine = ScriptedAsrEngine.single("打开空调"),
+                ttsEngine = ttsEngineFactory(),
                 logSink = logSink
             )
         }
@@ -99,6 +108,7 @@ object VoicePipelineFactory {
         audioSource: AudioSource,
         keywordSpotter: com.company.vehiclevoice.kws.KeywordSpotter,
         asrEngine: AsrEngine = ScriptedAsrEngine.single("打开空调"),
+        ttsEngine: TtsEngine = MockTtsEngine(),
         logSink: EventLogSink
     ): VoicePipeline = VoicePipeline(
         audioSource = audioSource,
@@ -109,7 +119,7 @@ object VoicePipelineFactory {
         stateStore = MockRedisStore(),
         stateProjector = VehicleStateProjector(),
         replyTemplateEngine = ReplyTemplateEngine(),
-        ttsEngine = MockTtsEngine(),
+        ttsEngine = ttsEngine,
         unityActionMapper = UnityActionMapper(clockMs = { 1_234_567_890L }),
         unityActionJsonEncoder = UnityActionJsonEncoder(),
         unityEventSink = RecordingUnityEventSink(),

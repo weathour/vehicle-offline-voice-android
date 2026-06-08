@@ -16,6 +16,7 @@ import com.company.vehiclevoice.core.VoicePipelineController
 import com.company.vehiclevoice.core.VoicePipelineFactory
 import com.company.vehiclevoice.core.VoiceRuntimeMode
 import com.company.vehiclevoice.log.AndroidEventLogSink
+import com.company.vehiclevoice.tts.AndroidTtsEngine
 
 class VoiceForegroundService : Service() {
     private val logSink = AndroidEventLogSink()
@@ -64,7 +65,8 @@ class VoiceForegroundService : Service() {
                     runCatching { VoskModelAssetInstaller.ensureModelCopied(this).absolutePath }
                         .onFailure { logSink.warn("Vosk model unavailable: ${it.message}") }
                         .getOrNull()
-                }
+                },
+                ttsEngineFactory = { AndroidTtsEngine(this) }
             )
         },
         logSink = logSink

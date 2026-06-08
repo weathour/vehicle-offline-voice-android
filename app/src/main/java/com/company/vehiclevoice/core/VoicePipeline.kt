@@ -190,8 +190,12 @@ class VoicePipeline(
         val mutated = stateProjector.apply(parse, stateStore)
         if (!mutated) logSink.info("State not mutated for intent=${parse.intent.name}")
         val reply = replyTemplateEngine.render(parse, stateStore)
-        ttsEngine.speak(reply)
-        logSink.info("TTS reply=$reply")
+        try {
+            ttsEngine.speak(reply)
+            logSink.info("TTS reply=$reply")
+        } catch (throwable: Throwable) {
+            logSink.warn("TTS failed but action pipeline continues: ${throwable.message}")
+        }
         val unityJson = unityActionMapper.map(parse)?.let { action ->
             unityActionJsonEncoder.encode(action).also { json ->
                 unityEventSink.send(json)
