@@ -5,10 +5,9 @@ import com.company.vehiclevoice.audio.toLittleEndianPcm16Bytes
 import org.vosk.Model
 import org.vosk.Recognizer
 import java.io.File
-import java.util.Locale
 
 /**
- * Real offline phrase-spotting adapter backed by Vosk ASR with a restricted wake grammar.
+ * Real offline phrase-spotting adapter backed by Vosk ASR.
  *
  * This is phrase spotting over an offline recognizer, not a production-grade low-power KWS model.
  * It requires a local filesystem model path and never performs runtime downloads.
@@ -22,9 +21,11 @@ class VoskKeywordSpotter(
 ) : KeywordSpotter, AutoCloseable {
     private val model: Model
     private var recognizer: Recognizer
+    private val wakeMatcher: WakePhraseMatcher
 
     init {
         require(wakePhrases.isNotEmpty()) { "wakePhrases must not be empty" }
+        wakeMatcher = WakePhraseMatcher.fromWakePhrases(wakePhrases)
         val modelDir = File(modelPath)
         require(modelDir.exists() && modelDir.isDirectory) {
             "Vosk model directory is missing: $modelPath. Package or copy an offline model before using VoskKeywordSpotter."
@@ -38,8 +39,7 @@ class VoskKeywordSpotter(
         val accepted = recognizer.acceptWaveForm(bytes, bytes.size)
         val json = if (accepted) recognizer.result else recognizer.partialResult
         val rawText = extractJsonField(json, if (accepted) "text" else "partial")
-        val text = rawText.normalized()
-        val matched = wakePhrases.firstOrNull { phrase -> text.contains(phrase.normalized()) }
+        val matched = wakeMatcher.match(rawText)
         return if (matched != null) {
             KeywordEvent.Wake(matched, minConfidence.coerceIn(0.0, 1.0), frame.sequence)
         } else {
@@ -75,5 +75,4 @@ class VoskKeywordSpotter(
             .replace("\\\\", "\\")
     }
 
-    private fun String.normalized(): String = lowercase(Locale.ROOT).replace(Regex("[\\s，。,.！？!?:：;；\\-]+"), "")
 }
