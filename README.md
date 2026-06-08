@@ -1,90 +1,89 @@
-# VehicleOfflineVoice
+# Vehicle Offline Voice Android
 
-Linux/Codex-first Android Kotlin project for an offline vehicle voice MVP.
+Android 离线车辆语音测试 APK。当前重点是**只读车辆状态接入**：手机或车载屏幕连接车辆 / 电脑 Redis，读取 protobuf 车辆状态，通过离线语音问答验证车速、电量、胎压、告警、协作场景等信息。
 
-Current stage: **real-device offline voice core-loop baseline**. The APK builds locally and now supports a real microphone + local Vosk wake/ASR + VAD + rule NLU + Mock/local vehicle state + Chinese TTS + Unity action JSON debug loop on an ordinary Android phone, while preserving mock/scripted paths for regression.
+GitHub private 仓库名：`vehicle-offline-voice-android`。
 
-## Environment
+## 当前状态
 
-This repository uses a user-local, CLI-first Android development environment:
+已完成：
 
-- JDK 17: `~/.local/opt/jdk-17`
-- Android SDK: `~/Android/Sdk`
-- Gradle Wrapper: `./gradlew`
+- Android 真机离线语音链路：唤醒词、VAD、Vosk ASR、规则 NLU、Android TTS。
+- 只读 Redis/protobuf 车辆状态读取。
+- 手机读取电脑 Redis 模拟器并完成端到端测试。
+- 车速、电量、胎压、告警、ACC/LKA、Sam 协作场景等问答。
+- ASR 常见误识别收敛，例如“写作/协同/合作”收敛为“协作”，“常见/场见”收敛为“场景”。
+- TTS 朗读前把 `V2I/V2V/V2X` 转为 `V突I/V突V/V突X`。
+- 上车测试优先 UI：填 Redis IP/端口，先连接测试，再启动语音测试。
 
-Source environment manually if needed:
+## 上车测试流程
+
+1. 手机连接车辆网络。
+2. 打开 APK。
+3. 填 Redis IP、端口、DB，密码可留空。
+4. 点击 **测试 Redis 连接 / 解码**。
+5. 确认面板显示：
+   - `connected=true`
+   - `decoded` 数量正常
+   - `missing` 和 `decodeError` 可接受或为 0
+6. 点击 **启动车上语音测试**。
+7. 语音测试：
+   - 小车小车，当前车速多少
+   - 小车小车，电量多少
+   - 小车小车，胎压正常吗
+   - 小车小车，当前有什么告警
+   - 小车小车，当前协作场景是什么
+   - 小车小车，现在有几辆协作车
+8. 手机通过后，再安装到车载屏幕或车载 Android 环境继续验证。
+
+## 本地模拟 Redis
+
+电脑侧启动模拟 Redis：
 
 ```bash
-source .codex/android-env.sh
+SIM_REDIS_HOST=0.0.0.0 SIM_REDIS_PORT=6379 bash scripts/start_sim_redis.sh
 ```
 
-## Local Codex verification commands
-
-Run these before any phone/device install:
+写入默认 protobuf 数据：
 
 ```bash
-bash scripts/check_android_env.sh
-bash scripts/test_unit.sh
-bash scripts/build_debug.sh
-bash scripts/lint_debug.sh
-bash scripts/package_debug.sh
-bash scripts/check_apk_permissions.sh
+python3 scripts/sim_vehicle_redis.py --host 127.0.0.1 --port 6379 defaults
 ```
 
-Expected debug APK path:
+设置协作场景：
+
+```bash
+python3 scripts/sim_vehicle_redis.py --host 127.0.0.1 --port 6379 set-sam --scene 11 --event start --count 3
+```
+
+## 开发验证命令
+
+```bash
+./gradlew :app:testDebugUnitTest
+./gradlew :app:assembleDebug
+scripts/check_apk_permissions.sh
+scripts/smoke_sim_redis.sh
+git diff --check
+```
+
+Debug APK：
 
 ```text
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## Implemented local modules
+## 重要说明
 
-- `audio`: PCM frame model, RMS, fake PCM source, guarded Android `AudioRecord` source.
-- `kws`: keyword spotter interface, scripted mock KWS, and local Vosk wake adapter.
-- `vad`: energy-based VAD with speech start/end events.
-- `asr`: ASR interface, scripted mock ASR, and local Vosk offline ASR adapter.
-- `nlu`: Chinese rule intent parser with unsafe/fallback rejection.
-- `data`: in-memory Mock Redis-like vehicle state store.
-- `template`: Chinese reply template engine.
-- `tts`: TTS interface and mock recorder.
-- `action`: Unity action model, mapper, manual JSON encoder, event sink.
-- `core`: full voice pipeline and lifecycle controller.
-- `log`: Android and recording log sinks.
+- 当前阶段只读车辆状态，不发真实车辆控制命令。
+- `INTERNET` 权限是有意加入，用于手机 / 车载屏幕读取车辆或电脑 Redis。
+- 不使用云 ASR/TTS。
+- Vosk restricted grammar 暂不启用；中文整句 grammar 已验证会导致 `[unk]`，当前采用开放 ASR + NLU 领域纠错。
 
-## Android behavior
+## 文档入口
 
-- `MainActivity` requests microphone and notification permissions before starting the service.
-- `VoiceForegroundService` declares and starts with microphone foreground service type.
-- Service supports preview/mock, virtual-mic smoke, and real-microphone manual validation modes.
-- Real-microphone mode logs KWS/VAD/ASR/NLU/TTS/Unity JSON events and is observable through the in-app debug panel.
-- `AndroidAudioRecordSource` refuses to start without `RECORD_AUDIO`.
-
-## Development constraints
-
-- No Unity project coupling in this repository.
-- No `INTERNET` permission.
-- No cloud ASR/TTS or external Redis.
-- Install to phone only after local verification gates pass.
-- Replace or tune KWS/ASR/TTS engines behind existing interfaces instead of rewriting business logic.
-
-## Current handoff
-
-The ordinary Android phone smoke test has progressed from mock-chain verification to a real offline voice-loop baseline. Latest observed successful commands include `小车小车 -> 打开空调` and `小车小车 -> 关闭空调`. See:
-
-- `docs/current-real-device-voice-status-2026-06-08.md`
-- `docs/current-handoff-2026-06-08.md`
-- `docs/device-smoke-result-2026-06-08.md`
-- `docs/handoff-next-stage.md`
-
-Next development should focus on **Real-device Voice Robustness and Integration Prep**: command recognition matrix, ASR correction/rule hardening, wake reliability tuning, phone-side debug UX, soak/resource stability, and Unity/RK3588S handoff.
-
-## Final phone-only commands
-
-Only after local verification passes:
-
-```bash
-bash scripts/final_install_phone.sh
-bash scripts/final_logcat.sh
-```
-
-See `docs/final-device-test-checklist.md`.
+- 阶段二交接：`docs/phase2-read-only-vehicle-voice-handoff-2026-06-08.md`
+- 阶段二测试记录：`docs/phase2-e2e-test-run-2026-06-08.md`
+- 上车 UI 整理：`docs/stage3-vehicle-test-ui-plan-2026-06-08.md`
+- 接口文档入库：`docs/interface-ingest/2026-06-08/`
+- 架构说明：`docs/architecture.md`
+- 语音链路：`docs/voice-pipeline.md`

@@ -2,12 +2,14 @@ package com.company.vehiclevoice
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.text.InputType
+import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CheckBox
@@ -15,9 +17,13 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import com.company.vehiclevoice.data.readonly.RedisVehicleSnapshotProvider
 import com.company.vehiclevoice.data.readonly.VehicleDataSourceMode
 import com.company.vehiclevoice.data.readonly.VehicleDataSourceRuntimeConfig
 import com.company.vehiclevoice.core.VoiceRuntimeMode
+import com.company.vehiclevoice.data.readonly.SocketRedisBinaryDataSource
+import com.company.vehiclevoice.data.readonly.SocketRedisConfig
+import kotlin.concurrent.thread
 
 class MainActivity : Activity() {
     private lateinit var logView: TextView
@@ -33,6 +39,11 @@ class MainActivity : Activity() {
     private lateinit var remoteRedisCheckBox: CheckBox
     private lateinit var redisHostInput: EditText
     private lateinit var redisPortInput: EditText
+    private lateinit var redisDbInput: EditText
+    private lateinit var redisPasswordInput: EditText
+    private lateinit var connectionPanel: TextView
+    private lateinit var developerPanel: LinearLayout
+    private lateinit var developerToggleButton: Button
     private var pendingStartAfterPermission = false
     private var pendingModeAfterPermission: VoiceRuntimeMode = VoiceRuntimeMode.PreviewMock
     private val serviceLogListener: (String) -> Unit = { line ->
@@ -46,8 +57,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(buildContentView())
         appendLog("项目骨架已启动：VehicleOfflineVoice")
-        appendLog("当前阶段：只读车况接入 Phase 1；默认使用本地模拟 Redis/protobuf。")
-        appendLog("如要手机读取电脑 Redis，请勾选‘读取电脑 Redis’，确认电脑已运行模拟 Redis，并填写电脑 IP/端口。")
+        appendLog("当前阶段：上车测试准备；填写车辆/电脑 Redis IP 和端口后，可先连接测试，再启动真实语音。")
     }
 
     override fun onResume() {
@@ -76,25 +86,22 @@ class MainActivity : Activity() {
             setTypeface(typeface, Typeface.BOLD)
         }
         root.addView(title)
+        root.addView(TextView(this).apply {
+            text = "上车流程：连接车辆网络 → 填 Redis IP/端口 → 测试连接 → 启动车上语音测试"
+            textSize = 13f
+        })
         root.addView(buildRedisConfigPanel())
 
         root.addView(Button(this).apply {
-            text = "启动 Mock 预览"
-            setOnClickListener {
-                startVoiceServiceWhenPermissionsReady(VoiceRuntimeMode.PreviewMock)
-            }
+            text = "1. 测试 Redis 连接 / 解码"
+            setOnClickListener { testRedisConnection() }
         })
 
         root.addView(Button(this).apply {
-            text = "启动虚拟麦克风烟测"
+            text = "2. 启动车上语音测试"
             setOnClickListener {
-                startVoiceServiceWhenPermissionsReady(VoiceRuntimeMode.VirtualMicSmoke)
-            }
-        })
-
-        root.addView(Button(this).apply {
-            text = "启动真实麦克风手动验证"
-            setOnClickListener {
+                remoteRedisCheckBox.isChecked = true
+                saveRedisConfig()
                 startVoiceServiceWhenPermissionsReady(VoiceRuntimeMode.RealMicManual)
             }
         })
@@ -104,19 +111,13 @@ class MainActivity : Activity() {
             setOnClickListener { stopVoiceService() }
         })
 
-        root.addView(Button(this).apply {
-            text = "清空日志/面板"
-            setOnClickListener {
-                logView.text = ""
-                resetDebugPanel()
-                UiLogBus.clear()
-            }
-        })
-
+        connectionPanel = debugLine("连接诊断", "未测试")
+        root.addView(connectionPanel)
         root.addView(buildDebugPanel())
+        root.addView(buildDeveloperPanel())
 
         val logTitle = TextView(this).apply {
-            text = "完整日志"
+            text = "现场日志"
             textSize = 16f
             setTypeface(typeface, Typeface.BOLD)
         }
@@ -143,31 +144,50 @@ class MainActivity : Activity() {
             setPadding(0, 16, 0, 16)
         }
         panel.addView(TextView(this).apply {
-            text = "只读车况数据源"
+            text = "车辆 / 电脑 Redis"
             textSize = 16f
             setTypeface(typeface, Typeface.BOLD)
         })
         remoteRedisCheckBox = CheckBox(this).apply {
-            text = "读取电脑 Redis（用于手机读取本电脑模拟数据库）"
-            isChecked = false
+            text = "读取外部 Redis（上车测试请保持勾选）"
+            isChecked = true
+            visibility = View.GONE
         }
         panel.addView(remoteRedisCheckBox)
+        panel.addView(TextView(this).apply {
+            text = "数据源：外部 Redis（开发模拟入口在下方折叠区）"
+            textSize = 13f
+        })
         redisHostInput = EditText(this).apply {
-            hint = "电脑 Redis Host"
-            setText(VehicleDataSourceRuntimeConfig.DEFAULT_REMOTE_HOST)
+            hint = "Redis IP，例如 192.168.1.10"
+            setText(loadString(PREF_REDIS_HOST, VehicleDataSourceRuntimeConfig.DEFAULT_REMOTE_HOST))
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             setSingleLine(true)
         }
         panel.addView(redisHostInput)
         redisPortInput = EditText(this).apply {
             hint = "端口"
-            setText(VehicleDataSourceRuntimeConfig.DEFAULT_REMOTE_PORT.toString())
+            setText(loadString(PREF_REDIS_PORT, VehicleDataSourceRuntimeConfig.DEFAULT_REMOTE_PORT.toString()))
             inputType = InputType.TYPE_CLASS_NUMBER
             setSingleLine(true)
         }
         panel.addView(redisPortInput)
+        redisDbInput = EditText(this).apply {
+            hint = "DB，默认 0"
+            setText(loadString(PREF_REDIS_DB, "0"))
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setSingleLine(true)
+        }
+        panel.addView(redisDbInput)
+        redisPasswordInput = EditText(this).apply {
+            hint = "密码，可留空"
+            setText(loadString(PREF_REDIS_PASSWORD, ""))
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+        }
+        panel.addView(redisPasswordInput)
         panel.addView(TextView(this).apply {
-            text = "未勾选时使用 APK 内置模拟数据；勾选后通过网络读取电脑 Redis，需要电脑和手机在同一网络。"
+            text = "手机必须与车辆 Redis 在同一网络。连接测试通过后，再启动语音测试。"
             textSize = 12f
         })
         return panel
@@ -202,6 +222,51 @@ class MainActivity : Activity() {
         panel.addView(warningPanel)
         panel.addView(cooperationPanel)
         return panel
+    }
+
+    private fun buildDeveloperPanel(): LinearLayout {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 10, 0, 10)
+        }
+        developerToggleButton = Button(this).apply {
+            text = "显示开发调试入口"
+            setOnClickListener {
+                val show = developerPanel.visibility != View.VISIBLE
+                developerPanel.visibility = if (show) View.VISIBLE else View.GONE
+                text = if (show) "隐藏开发调试入口" else "显示开发调试入口"
+            }
+        }
+        container.addView(developerToggleButton)
+        developerPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
+        developerPanel.addView(Button(this).apply {
+            text = "开发：启动 APK 内置模拟预览"
+            setOnClickListener {
+                remoteRedisCheckBox.isChecked = false
+                startVoiceServiceWhenPermissionsReady(VoiceRuntimeMode.PreviewMock)
+            }
+        })
+        developerPanel.addView(Button(this).apply {
+            text = "开发：启动虚拟麦克风烟测"
+            setOnClickListener {
+                remoteRedisCheckBox.isChecked = false
+                startVoiceServiceWhenPermissionsReady(VoiceRuntimeMode.VirtualMicSmoke)
+            }
+        })
+        developerPanel.addView(Button(this).apply {
+            text = "清空日志/面板"
+            setOnClickListener {
+                logView.text = ""
+                resetDebugPanel()
+                UiLogBus.clear()
+                connectionPanel.text = "连接诊断：未测试"
+            }
+        })
+        container.addView(developerPanel)
+        return container
     }
 
     private fun debugLine(label: String, value: String): TextView = TextView(this).apply {
@@ -276,11 +341,13 @@ class MainActivity : Activity() {
 
     private fun startVoiceService(mode: VoiceRuntimeMode) {
         val sourceConfig = selectedVehicleSourceConfig()
+        saveRedisConfig()
         val intent = Intent(this, VoiceForegroundService::class.java)
             .putExtra(VoiceRuntimeMode.EXTRA_NAME, mode.wireValue)
             .putExtra(VehicleDataSourceRuntimeConfig.EXTRA_SOURCE_MODE, sourceConfig.mode.wireValue)
             .putExtra(VehicleDataSourceRuntimeConfig.EXTRA_REDIS_HOST, sourceConfig.host)
             .putExtra(VehicleDataSourceRuntimeConfig.EXTRA_REDIS_PORT, sourceConfig.port)
+            .putExtra(VehicleDataSourceRuntimeConfig.EXTRA_REDIS_PASSWORD, sourceConfig.password ?: "")
             .putExtra(VehicleDataSourceRuntimeConfig.EXTRA_REDIS_DATABASE, sourceConfig.database)
             .putExtra(VehicleDataSourceRuntimeConfig.EXTRA_REDIS_TIMEOUT_MS, sourceConfig.timeoutMs)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -295,18 +362,84 @@ class MainActivity : Activity() {
     private fun selectedVehicleSourceConfig(): VehicleDataSourceRuntimeConfig {
         val host = redisHostInput.text.toString().trim().ifBlank { VehicleDataSourceRuntimeConfig.DEFAULT_REMOTE_HOST }
         val port = redisPortInput.text.toString().trim().toIntOrNull() ?: VehicleDataSourceRuntimeConfig.DEFAULT_REMOTE_PORT
+        val database = redisDbInput.text.toString().trim().toIntOrNull() ?: 0
+        val password = redisPasswordInput.text.toString().trim().takeIf { it.isNotBlank() }
         return if (remoteRedisCheckBox.isChecked) {
             VehicleDataSourceRuntimeConfig(
                 mode = VehicleDataSourceMode.RemoteRedis,
                 host = host,
                 port = port,
-                database = 0,
+                password = password,
+                database = database,
                 timeoutMs = VehicleDataSourceRuntimeConfig.DEFAULT_TIMEOUT_MS
             )
         } else {
             VehicleDataSourceRuntimeConfig()
         }
     }
+
+    private fun testRedisConnection() {
+        remoteRedisCheckBox.isChecked = true
+        val config = selectedVehicleSourceConfig()
+        saveRedisConfig()
+        connectionPanel.text = "连接诊断：正在测试 ${config.host}:${config.port}/db${config.database} ..."
+        appendLog("开始连接测试：${config.displayName}")
+        thread(name = "vehicle-redis-connection-test") {
+            val result = runCatching {
+                val provider = RedisVehicleSnapshotProvider(
+                    dataSource = SocketRedisBinaryDataSource(
+                        SocketRedisConfig(
+                            host = config.host,
+                            port = config.port,
+                            password = config.password,
+                            database = config.database,
+                            timeoutMs = config.timeoutMs
+                        )
+                    ),
+                    snapshotDeadlineMs = config.snapshotDeadlineMs
+                )
+                provider.readSnapshot()
+            }
+            runOnUiThread {
+                result.onSuccess { snapshot ->
+                    val decoded = snapshot.keyStatuses.values.count { it.decoded }
+                    val missing = snapshot.keyStatuses.values.count { !it.present }
+                    val errors = snapshot.keyStatuses.values.count { it.present && !it.decoded }
+                    val basic = listOfNotNull(
+                        snapshot.speedKmh?.let { "车速${it}km/h" },
+                        snapshot.gear?.let { "档位$it" },
+                        snapshot.batterySocPercent?.let { "电量${it}%" },
+                        snapshot.cooperativeState?.summary
+                    ).joinToString("，").ifBlank { "暂无摘要" }
+                    val message = "连接诊断：connected=${snapshot.diagnostics.connected}，decoded=$decoded，missing=$missing，decodeError=$errors；$basic"
+                    connectionPanel.text = message
+                    vehiclePanel.text = "只读车况：${snapshot.diagnostics.detail} decoded=$decoded missing=$missing error=$errors"
+                    cooperationPanel.text = "协作信息：${snapshot.cooperativeState?.summary ?: "未读取"}"
+                    appendLog(message)
+                    if (errors > 0 || missing > 0) {
+                        appendLog("异常 key：${snapshot.keyStatuses.values.filter { !it.decoded }.take(8).joinToString { "${it.key}:${it.error}" }}")
+                    }
+                }.onFailure { throwable ->
+                    val message = "连接诊断：失败 ${throwable.message ?: throwable::class.java.simpleName}"
+                    connectionPanel.text = message
+                    statusPanel.text = "状态：Redis 连接失败"
+                    appendLog(message)
+                }
+            }
+        }
+    }
+
+    private fun saveRedisConfig() {
+        getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(PREF_REDIS_HOST, redisHostInput.text.toString().trim())
+            .putString(PREF_REDIS_PORT, redisPortInput.text.toString().trim())
+            .putString(PREF_REDIS_DB, redisDbInput.text.toString().trim())
+            .putString(PREF_REDIS_PASSWORD, redisPasswordInput.text.toString())
+            .apply()
+    }
+
+    private fun loadString(key: String, fallback: String): String =
+        getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(key, fallback) ?: fallback
 
     override fun onRequestPermissionsResult(
         requestCode: Int,
@@ -343,5 +476,10 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQUEST_PERMISSIONS = 42
+        private const val PREFS = "vehicle_voice_prefs"
+        private const val PREF_REDIS_HOST = "redis_host"
+        private const val PREF_REDIS_PORT = "redis_port"
+        private const val PREF_REDIS_DB = "redis_db"
+        private const val PREF_REDIS_PASSWORD = "redis_password"
     }
 }
