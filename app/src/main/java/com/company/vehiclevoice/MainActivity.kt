@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.view.ViewGroup
@@ -15,18 +16,27 @@ import com.company.vehiclevoice.core.VoiceRuntimeMode
 
 class MainActivity : Activity() {
     private lateinit var logView: TextView
+    private lateinit var statusPanel: TextView
+    private lateinit var wakePanel: TextView
+    private lateinit var asrPanel: TextView
+    private lateinit var nluPanel: TextView
+    private lateinit var ttsPanel: TextView
+    private lateinit var rmsPanel: TextView
     private var pendingStartAfterPermission = false
     private var pendingModeAfterPermission: VoiceRuntimeMode = VoiceRuntimeMode.PreviewMock
     private val serviceLogListener: (String) -> Unit = { line ->
-        runOnUiThread { logView.append("$line\n") }
+        runOnUiThread {
+            updateDebugPanel(line)
+            logView.append("$line\n")
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(buildContentView())
         appendLog("项目骨架已启动：VehicleOfflineVoice")
-        appendLog("当前阶段：上机前本地 Mock 链路；真实 KWS/ASR 模型与真机安装仍放在最后阶段。")
-        appendLog("提示：点击启动后，服务端 KWS/VAD/ASR/NLU/TTS/Unity JSON 会显示在这里。")
+        appendLog("当前阶段：离线语音核心闭环调试；真实麦克风验证请看上方识别/TTS 面板。")
+        appendLog("提示：面板会单独显示 KWS/ASR/NLU/TTS，底部保留完整日志。")
     }
 
     override fun onResume() {
@@ -52,6 +62,7 @@ class MainActivity : Activity() {
         val title = TextView(this).apply {
             text = "Vehicle Offline Voice"
             textSize = 22f
+            setTypeface(typeface, Typeface.BOLD)
         }
         root.addView(title)
 
@@ -82,16 +93,26 @@ class MainActivity : Activity() {
         })
 
         root.addView(Button(this).apply {
-            text = "清空日志"
+            text = "清空日志/面板"
             setOnClickListener {
                 logView.text = ""
+                resetDebugPanel()
                 UiLogBus.clear()
             }
         })
 
+        root.addView(buildDebugPanel())
+
+        val logTitle = TextView(this).apply {
+            text = "完整日志"
+            textSize = 16f
+            setTypeface(typeface, Typeface.BOLD)
+        }
+        root.addView(logTitle)
+
         val scrollView = ScrollView(this)
         logView = TextView(this).apply {
-            textSize = 14f
+            textSize = 12f
             setTextIsSelectable(true)
         }
         scrollView.addView(logView)
@@ -103,6 +124,69 @@ class MainActivity : Activity() {
 
         return root
     }
+
+    private fun buildDebugPanel(): LinearLayout {
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(18, 18, 18, 18)
+        }
+        panel.addView(TextView(this).apply {
+            text = "识别 / TTS 调试面板"
+            textSize = 18f
+            setTypeface(typeface, Typeface.BOLD)
+        })
+        statusPanel = debugLine("状态", "待启动")
+        wakePanel = debugLine("唤醒", "未检测")
+        asrPanel = debugLine("识别", "未识别")
+        nluPanel = debugLine("意图", "无")
+        ttsPanel = debugLine("回复", "无")
+        rmsPanel = debugLine("音频", "无 RMS")
+        panel.addView(statusPanel)
+        panel.addView(wakePanel)
+        panel.addView(asrPanel)
+        panel.addView(nluPanel)
+        panel.addView(ttsPanel)
+        panel.addView(rmsPanel)
+        return panel
+    }
+
+    private fun debugLine(label: String, value: String): TextView = TextView(this).apply {
+        text = "$label：$value"
+        textSize = 15f
+        setTextIsSelectable(true)
+    }
+
+    private fun resetDebugPanel() {
+        if (!::statusPanel.isInitialized) return
+        statusPanel.text = "状态：待启动"
+        wakePanel.text = "唤醒：未检测"
+        asrPanel.text = "识别：未识别"
+        nluPanel.text = "意图：无"
+        ttsPanel.text = "回复：无"
+        rmsPanel.text = "音频：无 RMS"
+    }
+
+    private fun updateDebugPanel(line: String) {
+        when {
+            "VoiceForegroundService start command" in line -> statusPanel.text = "状态：服务启动 ${line.after("mode=")}"
+            "Foreground service type" in line -> statusPanel.text = "状态：前台麦克风服务已启动"
+            "Pipeline state=listening_start" in line -> statusPanel.text = "状态：监听中，等待唤醒词"
+            "Pipeline state=wake_detected" in line -> statusPanel.text = "状态：已唤醒，请说命令"
+            "Pipeline state=recording_utterance" in line -> statusPanel.text = "状态：正在录制命令"
+            "Pipeline state=recognizing" in line -> statusPanel.text = "状态：正在识别命令"
+            "Pipeline state=listening_resume" in line -> statusPanel.text = "状态：回到监听，等待下一次唤醒"
+            "VoicePipelineController failed" in line || "ERROR" in line -> statusPanel.text = "状态：错误 ${line.takeLast(80)}"
+        }
+        if ("KWS wake" in line) wakePanel.text = "唤醒：${line.after("keyword=").before(" confidence=")}"
+        if ("ASR text=" in line) asrPanel.text = "识别：${line.after("ASR text=").before(" confidence=").ifBlank { "空结果" }}"
+        if ("NLU intent=" in line) nluPanel.text = "意图：${line.after("NLU intent=").before(" reason=")}"
+        if ("TTS reply=" in line) ttsPanel.text = "回复：${line.after("TTS reply=")}"
+        if ("Audio frame=" in line) rmsPanel.text = "音频：${line.after("Audio frame=")}"
+        if ("Vosk model unavailable" in line) statusPanel.text = "状态：Vosk 模型不可用"
+    }
+
+    private fun String.after(token: String): String = substringAfter(token, missingDelimiterValue = "")
+    private fun String.before(token: String): String = substringBefore(token, missingDelimiterValue = this)
 
     private fun startVoiceServiceWhenPermissionsReady(mode: VoiceRuntimeMode) {
         val permissions = missingRuntimePermissions(mode)
@@ -138,6 +222,7 @@ class MainActivity : Activity() {
             startService(intent)
         }
         appendLog("已发送启动前台服务命令：${mode.displayName}")
+        statusPanel.text = "状态：启动命令已发送 ${mode.displayName}"
     }
 
     override fun onRequestPermissionsResult(
@@ -157,6 +242,7 @@ class MainActivity : Activity() {
             if (pendingStartAfterPermission) startVoiceService(pendingModeAfterPermission)
         } else {
             appendLog("权限被拒绝，未启动真实麦克风相关服务：${denied.joinToString()}")
+            statusPanel.text = "状态：权限被拒绝"
         }
         pendingStartAfterPermission = false
         pendingModeAfterPermission = VoiceRuntimeMode.PreviewMock
@@ -165,11 +251,12 @@ class MainActivity : Activity() {
     private fun stopVoiceService() {
         stopService(Intent(this, VoiceForegroundService::class.java))
         appendLog("已发送停止服务命令")
+        statusPanel.text = "状态：已发送停止服务命令"
     }
 
     private fun appendLog(message: String) {
         val line = "${System.currentTimeMillis()}  $message\n"
-        logView.append(line)
+        if (::logView.isInitialized) logView.append(line)
         VoiceLogger.info(message)
     }
 
