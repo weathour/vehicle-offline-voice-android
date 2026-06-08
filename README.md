@@ -72,6 +72,7 @@ app/build/outputs/apk/debug/app-debug.apk
 The ordinary Android phone smoke test has progressed from mock-chain verification to a real offline voice-loop baseline. Latest observed successful commands include `小车小车 -> 打开空调` and `小车小车 -> 关闭空调`. See:
 
 - `docs/current-real-device-voice-status-2026-06-08.md`
+- `docs/current-handoff-2026-06-08.md`
 - `docs/device-smoke-result-2026-06-08.md`
 - `docs/handoff-next-stage.md`
 
