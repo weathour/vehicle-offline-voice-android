@@ -118,9 +118,7 @@ class MainActivity : Activity() {
 
     private fun missingRuntimePermissions(mode: VoiceRuntimeMode): List<String> {
         val permissions = buildList {
-            if (mode == VoiceRuntimeMode.RealMicManual &&
-                checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED
-            ) {
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                 add(Manifest.permission.RECORD_AUDIO)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&

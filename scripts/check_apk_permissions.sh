@@ -30,6 +30,7 @@ fi
 for required in \
   'android.permission.RECORD_AUDIO' \
   'android.permission.FOREGROUND_SERVICE' \
+  'android.permission.FOREGROUND_SERVICE_MICROPHONE' \
   'android.permission.POST_NOTIFICATIONS'; do
   if ! grep -q "$required" <<<"$PERMISSIONS"; then
     echo "ERROR: APK is missing required permission: $required" >&2
@@ -46,4 +47,4 @@ if ! grep -q 'android:foregroundServiceType="microphone"' "$MERGED_MANIFEST"; th
   exit 1
 fi
 
-echo "APK permission policy OK: no INTERNET, required local voice permissions present, microphone foreground service type declared."
+echo "APK permission policy OK: no INTERNET, required local voice permissions present, microphone FGS permission and service type declared."

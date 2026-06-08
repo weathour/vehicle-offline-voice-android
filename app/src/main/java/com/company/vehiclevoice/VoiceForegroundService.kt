@@ -91,7 +91,8 @@ class VoiceForegroundService : Service() {
 
     private fun startForegroundForMode(mode: VoiceRuntimeMode) {
         val notification = buildNotification()
-        if (mode == VoiceRuntimeMode.RealMicManual && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        logSink.info("Foreground service type=microphone mode=${mode.wireValue}")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             startForeground(
                 NOTIFICATION_ID,
                 notification,
