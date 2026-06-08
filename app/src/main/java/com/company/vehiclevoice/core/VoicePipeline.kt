@@ -59,7 +59,7 @@ class VoicePipeline(
     private val unityActionJsonEncoder: UnityActionJsonEncoder,
     private val unityEventSink: UnityEventSink,
     private val logSink: EventLogSink
-) {
+) : AutoCloseable {
     fun runUntilSourceEnds(maxFrames: Int = 2_000): VoicePipelineResult = run(
         VoicePipelineRunConfig(maxFrames = maxFrames)
     )
@@ -180,6 +180,22 @@ class VoicePipeline(
             framesRead = framesRead,
             utterancesHandled = utterancesHandled
         )
+    }
+
+    override fun close() {
+        closeIfNeeded(audioSource)
+        closeIfNeeded(keywordSpotter)
+        closeIfNeeded(asrEngine)
+        closeIfNeeded(ttsEngine)
+        closeIfNeeded(unityEventSink)
+    }
+
+    private fun closeIfNeeded(value: Any) {
+        if (value is AutoCloseable) {
+            runCatching { value.close() }.onFailure { throwable ->
+                logSink.warn("Resource close failed: ${throwable.message}")
+            }
+        }
     }
 
     private fun handleUtterance(frames: List<PcmFrame>): VoicePipelineResult {

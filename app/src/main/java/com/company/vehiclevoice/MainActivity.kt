@@ -105,7 +105,7 @@ class MainActivity : Activity() {
     }
 
     private fun startVoiceServiceWhenPermissionsReady(mode: VoiceRuntimeMode) {
-        val permissions = missingRuntimePermissions()
+        val permissions = missingRuntimePermissions(mode)
         if (permissions.isNotEmpty()) {
             pendingStartAfterPermission = true
             pendingModeAfterPermission = mode
@@ -116,9 +116,11 @@ class MainActivity : Activity() {
         startVoiceService(mode)
     }
 
-    private fun missingRuntimePermissions(): List<String> {
+    private fun missingRuntimePermissions(mode: VoiceRuntimeMode): List<String> {
         val permissions = buildList {
-            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            if (mode == VoiceRuntimeMode.RealMicManual &&
+                checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED
+            ) {
                 add(Manifest.permission.RECORD_AUDIO)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&

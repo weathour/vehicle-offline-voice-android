@@ -25,6 +25,19 @@ import com.company.vehiclevoice.tts.TtsEngine
 import com.company.vehiclevoice.vad.EnergyVadEngine
 
 object VoicePipelineFactory {
+    fun runConfigForMode(mode: VoiceRuntimeMode): VoicePipelineRunConfig = when (mode) {
+        VoiceRuntimeMode.PreviewMock -> VoicePipelineRunConfig(maxFrames = 2_000, maxUtterances = 1)
+        VoiceRuntimeMode.VirtualMicSmoke -> VoicePipelineRunConfig(maxFrames = 2_000, maxUtterances = 1, rmsLogEveryFrames = 5)
+        VoiceRuntimeMode.RealMicManual -> VoicePipelineRunConfig(
+            maxFrames = Int.MAX_VALUE,
+            maxUtterances = Int.MAX_VALUE,
+            continueAfterUtterance = true,
+            rmsLogEveryFrames = 25,
+            wakeTimeoutFrames = 300,
+            maxUtteranceFrames = 300
+        )
+    }
+
     fun createServicePipeline(
         mode: VoiceRuntimeMode,
         logSink: EventLogSink,
@@ -85,23 +98,14 @@ object VoicePipelineFactory {
         ttsEngineFactory: () -> TtsEngine = { MockTtsEngine() }
     ): VoicePipeline {
         val modelPath = voskModelPath()
-        return if (modelPath != null) {
-            createPipeline(
-                audioSource = AndroidAudioRecordSource(permissionGranted = realMicPermissionGranted),
-                keywordSpotter = VoskKeywordSpotter(modelPath = modelPath),
-                asrEngine = VoskOfflineAsrEngine(modelPath = modelPath),
-                ttsEngine = ttsEngineFactory(),
-                logSink = logSink
-            )
-        } else {
-            createPipeline(
-                audioSource = AndroidAudioRecordSource(permissionGranted = realMicPermissionGranted),
-                keywordSpotter = ScriptedKeywordSpotter(wakeSequences = setOf(10L)),
-                asrEngine = ScriptedAsrEngine.single("打开空调"),
-                ttsEngine = ttsEngineFactory(),
-                logSink = logSink
-            )
-        }
+            ?: error("RealMicManual requires a packaged/copied offline Vosk model; use PreviewMock or VirtualMicSmoke for non-real modes")
+        return createPipeline(
+            audioSource = AndroidAudioRecordSource(permissionGranted = realMicPermissionGranted),
+            keywordSpotter = VoskKeywordSpotter(modelPath = modelPath),
+            asrEngine = VoskOfflineAsrEngine(modelPath = modelPath),
+            ttsEngine = ttsEngineFactory(),
+            logSink = logSink
+        )
     }
 
     private fun createPipeline(

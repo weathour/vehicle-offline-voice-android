@@ -8,6 +8,7 @@ import java.util.concurrent.Future
 class VoicePipelineController(
     private val pipelineFactory: () -> VoicePipeline,
     private val logSink: EventLogSink,
+    private val runConfigFactory: () -> VoicePipelineRunConfig = { VoicePipelineRunConfig() },
     private val executor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "vehicle-voice-pipeline").apply { isDaemon = true }
     }
@@ -42,7 +43,7 @@ class VoicePipelineController(
         logSink.info("VoicePipelineController starting")
         runningFuture = executor.submit {
             try {
-                val result = pipelineFactory().runUntilSourceEnds()
+                val result = pipelineFactory().use { pipeline -> pipeline.run(runConfigFactory()) }
                 lastResult = result
                 synchronized(this) {
                     if (state == State.Running) state = State.Completed

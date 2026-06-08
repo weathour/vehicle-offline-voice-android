@@ -38,7 +38,7 @@ class VoiceForegroundService : Service() {
             currentMode = requestedMode
             controller = newController(requestedMode)
         }
-        startForegroundWithMicrophoneType()
+        startForegroundForMode(requestedMode)
         controller?.start()
         return START_STICKY
     }
@@ -69,7 +69,8 @@ class VoiceForegroundService : Service() {
                 ttsEngineFactory = { AndroidTtsEngine(this) }
             )
         },
-        logSink = logSink
+        logSink = logSink,
+        runConfigFactory = { VoicePipelineFactory.runConfigForMode(mode) }
     )
 
     private fun buildNotification(): Notification {
@@ -88,9 +89,9 @@ class VoiceForegroundService : Service() {
             .build()
     }
 
-    private fun startForegroundWithMicrophoneType() {
+    private fun startForegroundForMode(mode: VoiceRuntimeMode) {
         val notification = buildNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (mode == VoiceRuntimeMode.RealMicManual && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIFICATION_ID,
                 notification,
