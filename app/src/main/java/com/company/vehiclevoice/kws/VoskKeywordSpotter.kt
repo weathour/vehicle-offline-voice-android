@@ -15,9 +15,10 @@ import java.util.Locale
  */
 class VoskKeywordSpotter(
     modelPath: String,
-    private val wakePhrases: List<String> = listOf("你好车机"),
+    private val wakePhrases: List<String> = listOf("你好车机", "你好 车机", "小车小车", "小车 小车"),
     private val sampleRateHz: Float = PcmFrame.DEFAULT_SAMPLE_RATE_HZ.toFloat(),
-    private val minConfidence: Double = 0.50
+    private val minConfidence: Double = 0.50,
+    private val useRestrictedGrammar: Boolean = false
 ) : KeywordSpotter, AutoCloseable {
     private val model: Model
     private var recognizer: Recognizer
@@ -36,7 +37,8 @@ class VoskKeywordSpotter(
         val bytes = frame.toLittleEndianPcm16Bytes()
         val accepted = recognizer.acceptWaveForm(bytes, bytes.size)
         val json = if (accepted) recognizer.result else recognizer.partialResult
-        val text = extractJsonField(json, if (accepted) "text" else "partial").normalized()
+        val rawText = extractJsonField(json, if (accepted) "text" else "partial")
+        val text = rawText.normalized()
         val matched = wakePhrases.firstOrNull { phrase -> text.contains(phrase.normalized()) }
         return if (matched != null) {
             KeywordEvent.Wake(matched, minConfidence.coerceIn(0.0, 1.0), frame.sequence)
@@ -55,7 +57,11 @@ class VoskKeywordSpotter(
         model.close()
     }
 
-    private fun newRecognizer(): Recognizer = Recognizer(model, sampleRateHz, grammarJson(wakePhrases))
+    private fun newRecognizer(): Recognizer = if (useRestrictedGrammar) {
+        Recognizer(model, sampleRateHz, grammarJson(wakePhrases))
+    } else {
+        Recognizer(model, sampleRateHz)
+    }
 
     private fun grammarJson(phrases: List<String>): String =
         (phrases + "[unk]").joinToString(prefix = "[", postfix = "]") { phrase ->
