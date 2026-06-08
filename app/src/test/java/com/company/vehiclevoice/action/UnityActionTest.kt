@@ -25,6 +25,17 @@ class UnityActionTest {
         assertNull(UnityActionMapper(clockMs = { 123L }).map(parse))
     }
 
+
+    @Test
+    fun readOnlyQueriesDoNotCreateUnityAction() {
+        val parser = RuleIntentParser()
+        val mapper = UnityActionMapper(clockMs = { 123L })
+
+        assertNull(mapper.map(parser.parse("当前状态")))
+        assertNull(mapper.map(parser.parse("有故障吗")))
+        assertNull(mapper.map(parser.parse("当前协作场景是什么")))
+    }
+
     @Test
     fun jsonEncoderEscapesQuotesBackslashesAndUnicodeText() {
         val json = UnityActionJsonEncoder().encode(

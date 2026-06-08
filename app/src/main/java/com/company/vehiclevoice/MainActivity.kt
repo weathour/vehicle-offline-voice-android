@@ -7,11 +7,16 @@ import android.content.pm.PackageManager
 import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
+import android.text.InputType
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.CheckBox
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import com.company.vehiclevoice.data.readonly.VehicleDataSourceMode
+import com.company.vehiclevoice.data.readonly.VehicleDataSourceRuntimeConfig
 import com.company.vehiclevoice.core.VoiceRuntimeMode
 
 class MainActivity : Activity() {
@@ -22,6 +27,12 @@ class MainActivity : Activity() {
     private lateinit var nluPanel: TextView
     private lateinit var ttsPanel: TextView
     private lateinit var rmsPanel: TextView
+    private lateinit var vehiclePanel: TextView
+    private lateinit var warningPanel: TextView
+    private lateinit var cooperationPanel: TextView
+    private lateinit var remoteRedisCheckBox: CheckBox
+    private lateinit var redisHostInput: EditText
+    private lateinit var redisPortInput: EditText
     private var pendingStartAfterPermission = false
     private var pendingModeAfterPermission: VoiceRuntimeMode = VoiceRuntimeMode.PreviewMock
     private val serviceLogListener: (String) -> Unit = { line ->
@@ -35,8 +46,8 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(buildContentView())
         appendLog("项目骨架已启动：VehicleOfflineVoice")
-        appendLog("当前阶段：离线语音核心闭环调试；真实麦克风验证请看上方识别/TTS 面板。")
-        appendLog("提示：面板会单独显示 KWS/ASR/NLU/TTS，底部保留完整日志。")
+        appendLog("当前阶段：只读车况接入 Phase 1；默认使用本地模拟 Redis/protobuf。")
+        appendLog("如要手机读取电脑 Redis，请勾选‘读取电脑 Redis’，确认电脑已运行模拟 Redis，并填写电脑 IP/端口。")
     }
 
     override fun onResume() {
@@ -65,6 +76,7 @@ class MainActivity : Activity() {
             setTypeface(typeface, Typeface.BOLD)
         }
         root.addView(title)
+        root.addView(buildRedisConfigPanel())
 
         root.addView(Button(this).apply {
             text = "启动 Mock 预览"
@@ -125,13 +137,49 @@ class MainActivity : Activity() {
         return root
     }
 
+    private fun buildRedisConfigPanel(): LinearLayout {
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 16, 0, 16)
+        }
+        panel.addView(TextView(this).apply {
+            text = "只读车况数据源"
+            textSize = 16f
+            setTypeface(typeface, Typeface.BOLD)
+        })
+        remoteRedisCheckBox = CheckBox(this).apply {
+            text = "读取电脑 Redis（用于手机读取本电脑模拟数据库）"
+            isChecked = false
+        }
+        panel.addView(remoteRedisCheckBox)
+        redisHostInput = EditText(this).apply {
+            hint = "电脑 Redis Host"
+            setText(VehicleDataSourceRuntimeConfig.DEFAULT_REMOTE_HOST)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true)
+        }
+        panel.addView(redisHostInput)
+        redisPortInput = EditText(this).apply {
+            hint = "端口"
+            setText(VehicleDataSourceRuntimeConfig.DEFAULT_REMOTE_PORT.toString())
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setSingleLine(true)
+        }
+        panel.addView(redisPortInput)
+        panel.addView(TextView(this).apply {
+            text = "未勾选时使用 APK 内置模拟数据；勾选后通过网络读取电脑 Redis，需要电脑和手机在同一网络。"
+            textSize = 12f
+        })
+        return panel
+    }
+
     private fun buildDebugPanel(): LinearLayout {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(18, 18, 18, 18)
         }
         panel.addView(TextView(this).apply {
-            text = "识别 / TTS 调试面板"
+            text = "识别 / TTS / 车况调试面板"
             textSize = 18f
             setTypeface(typeface, Typeface.BOLD)
         })
@@ -141,12 +189,18 @@ class MainActivity : Activity() {
         nluPanel = debugLine("意图", "无")
         ttsPanel = debugLine("回复", "无")
         rmsPanel = debugLine("音频", "无 RMS")
+        vehiclePanel = debugLine("只读车况", "未读取")
+        warningPanel = debugLine("告警解释", "未读取")
+        cooperationPanel = debugLine("协作信息", "未读取")
         panel.addView(statusPanel)
         panel.addView(wakePanel)
         panel.addView(asrPanel)
         panel.addView(nluPanel)
         panel.addView(ttsPanel)
         panel.addView(rmsPanel)
+        panel.addView(vehiclePanel)
+        panel.addView(warningPanel)
+        panel.addView(cooperationPanel)
         return panel
     }
 
@@ -164,12 +218,15 @@ class MainActivity : Activity() {
         nluPanel.text = "意图：无"
         ttsPanel.text = "回复：无"
         rmsPanel.text = "音频：无 RMS"
+        vehiclePanel.text = "只读车况：未读取"
+        warningPanel.text = "告警解释：未读取"
+        cooperationPanel.text = "协作信息：未读取"
     }
 
     private fun updateDebugPanel(line: String) {
         when {
             "VoiceForegroundService start command" in line -> statusPanel.text = "状态：服务启动 ${line.after("mode=")}"
-            "Foreground service type" in line -> statusPanel.text = "状态：前台麦克风服务已启动"
+            "Foreground service type" in line -> statusPanel.text = "状态：前台麦克风服务已启动 ${line.after("vehicleSource=")}"
             "Pipeline state=listening_start" in line -> statusPanel.text = "状态：监听中，等待唤醒词"
             "Pipeline state=wake_detected" in line -> statusPanel.text = "状态：已唤醒，请说命令"
             "Pipeline state=recording_utterance" in line -> statusPanel.text = "状态：正在录制命令"
@@ -182,6 +239,9 @@ class MainActivity : Activity() {
         if ("NLU intent=" in line) nluPanel.text = "意图：${line.after("NLU intent=").before(" reason=")}"
         if ("TTS reply=" in line) ttsPanel.text = "回复：${line.after("TTS reply=")}"
         if ("Audio frame=" in line) rmsPanel.text = "音频：${line.after("Audio frame=")}"
+        if ("Vehicle read-only snapshot" in line) vehiclePanel.text = "只读车况：${line.after("Vehicle read-only snapshot ").before(" warning=").take(220)}"
+        if (" warning=" in line) warningPanel.text = "告警解释：${line.after(" warning=").before(" cooperation=").take(180)}"
+        if (" cooperation=" in line) cooperationPanel.text = "协作信息：${line.after(" cooperation=").take(180)}"
         if ("Vosk model unavailable" in line) statusPanel.text = "状态：Vosk 模型不可用"
     }
 
@@ -215,14 +275,37 @@ class MainActivity : Activity() {
     }
 
     private fun startVoiceService(mode: VoiceRuntimeMode) {
-        val intent = Intent(this, VoiceForegroundService::class.java).putExtra(VoiceRuntimeMode.EXTRA_NAME, mode.wireValue)
+        val sourceConfig = selectedVehicleSourceConfig()
+        val intent = Intent(this, VoiceForegroundService::class.java)
+            .putExtra(VoiceRuntimeMode.EXTRA_NAME, mode.wireValue)
+            .putExtra(VehicleDataSourceRuntimeConfig.EXTRA_SOURCE_MODE, sourceConfig.mode.wireValue)
+            .putExtra(VehicleDataSourceRuntimeConfig.EXTRA_REDIS_HOST, sourceConfig.host)
+            .putExtra(VehicleDataSourceRuntimeConfig.EXTRA_REDIS_PORT, sourceConfig.port)
+            .putExtra(VehicleDataSourceRuntimeConfig.EXTRA_REDIS_DATABASE, sourceConfig.database)
+            .putExtra(VehicleDataSourceRuntimeConfig.EXTRA_REDIS_TIMEOUT_MS, sourceConfig.timeoutMs)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)
         } else {
             startService(intent)
         }
-        appendLog("已发送启动前台服务命令：${mode.displayName}")
-        statusPanel.text = "状态：启动命令已发送 ${mode.displayName}"
+        appendLog("已发送启动前台服务命令：${mode.displayName}；车况数据源：${sourceConfig.displayName}")
+        statusPanel.text = "状态：启动命令已发送 ${mode.displayName} / ${sourceConfig.displayName}"
+    }
+
+    private fun selectedVehicleSourceConfig(): VehicleDataSourceRuntimeConfig {
+        val host = redisHostInput.text.toString().trim().ifBlank { VehicleDataSourceRuntimeConfig.DEFAULT_REMOTE_HOST }
+        val port = redisPortInput.text.toString().trim().toIntOrNull() ?: VehicleDataSourceRuntimeConfig.DEFAULT_REMOTE_PORT
+        return if (remoteRedisCheckBox.isChecked) {
+            VehicleDataSourceRuntimeConfig(
+                mode = VehicleDataSourceMode.RemoteRedis,
+                host = host,
+                port = port,
+                database = 0,
+                timeoutMs = VehicleDataSourceRuntimeConfig.DEFAULT_TIMEOUT_MS
+            )
+        } else {
+            VehicleDataSourceRuntimeConfig()
+        }
     }
 
     override fun onRequestPermissionsResult(
@@ -254,13 +337,11 @@ class MainActivity : Activity() {
         statusPanel.text = "状态：已发送停止服务命令"
     }
 
-    private fun appendLog(message: String) {
-        val line = "${System.currentTimeMillis()}  $message\n"
-        if (::logView.isInitialized) logView.append(line)
-        VoiceLogger.info(message)
+    private fun appendLog(line: String) {
+        if (::logView.isInitialized) logView.append("$line\n")
     }
 
     companion object {
-        private const val REQUEST_PERMISSIONS = 2001
+        private const val REQUEST_PERMISSIONS = 42
     }
 }

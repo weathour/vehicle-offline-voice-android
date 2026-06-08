@@ -22,13 +22,9 @@ fi
 PERMISSIONS="$($AAPT dump permissions "$APK")"
 echo "$PERMISSIONS"
 
-if grep -q 'android.permission.INTERNET' <<<"$PERMISSIONS"; then
-  echo "ERROR: APK must not request android.permission.INTERNET" >&2
-  exit 1
-fi
-
 for required in \
   'android.permission.RECORD_AUDIO' \
+  'android.permission.INTERNET' \
   'android.permission.FOREGROUND_SERVICE' \
   'android.permission.FOREGROUND_SERVICE_MICROPHONE' \
   'android.permission.POST_NOTIFICATIONS'; do
@@ -47,4 +43,4 @@ if ! grep -q 'android:foregroundServiceType="microphone"' "$MERGED_MANIFEST"; th
   exit 1
 fi
 
-echo "APK permission policy OK: no INTERNET, required local voice permissions present, microphone FGS permission and service type declared."
+echo "APK permission policy OK: INTERNET intentionally present for Phase 1 remote Redis; required local voice permissions and microphone FGS type declared."

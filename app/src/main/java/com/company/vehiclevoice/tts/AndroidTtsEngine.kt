@@ -17,13 +17,14 @@ class AndroidTtsEngine(context: Context) : TtsEngine, AutoCloseable {
         if (!ready.get()) {
             throw IllegalStateException("Android TTS is not initialized")
         }
+        val speechText = TtsPronunciationFormatter.forSpeech(text)
         tts.language = Locale.CHINESE
         val utteranceId = "vehicle-voice-${UUID.randomUUID()}"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+            tts.speak(speechText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         } else {
             @Suppress("DEPRECATION")
-            tts.speak(text, TextToSpeech.QUEUE_FLUSH, hashMapOf(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID to utteranceId))
+            tts.speak(speechText, TextToSpeech.QUEUE_FLUSH, hashMapOf(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID to utteranceId))
         }
     }
 

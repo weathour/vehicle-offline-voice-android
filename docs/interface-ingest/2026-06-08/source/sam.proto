@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+message CollaborativeVehicle {
+    int32 vid = 1;
+    int32 suggested_driving_behavior = 2;
+}
+
+message Sam {
+    enum EventType {
+        EVENT_UNKNOWN = 0;
+        EVENT_START = 1;
+        EVENT_ONGOING = 2;
+        EVENT_END = 3;
+    }
+
+    double timestamp = 1;
+    //0-无场景 1-v2v协作式变道 2-v2v协同自适应巡航 3-v2v协作式车道汇入 4-v2v编队行驶 5-v2v合作式借道 6-v2v无信号匝道转向或交替通行
+    //7-v2v路口对向行驶车辆无保护左转 8-v2i协作式变道 9-v2i协同自适应巡航 10-v2i协作式车道汇入 11-v2i动态车速限制 12-v2i编队行驶 13-v2i远程控制驾驶
+    int32 scene_id = 2;
+    int32 vid = 3; // 车辆 ID
+    string vehicle_num = 4; // 车牌号
+    string auto_level = 5; // 自动驾驶能力等级
+    int32 driving_mode_fd = 6; // 驾驶状态反馈
+    int32 gear_location_fd = 7; // 档位值反馈
+    double steering_value_fd = 8; // 方向盘反馈
+    double accelaration_cmd = 9; // 加速度命令
+    double speed_mps = 10; // 车速（m/s）
+    int32 collaborative_vehicle_count = 11;
+    repeated CollaborativeVehicle collaborative_vehicle_list = 12;
+    int32 driving_intention = 13; // 请求方计划驾驶行为
+    int32 intent_reason = 14; // 请求方意图原因
+    int32 guide_decision = 15; // 引导方决策结果
+    int32 feedback_result = 16; // 协作方结果反馈
+    int32 coordinate_behavior = 17; // 请求方/协作方/引导方当前协作行为
+
+    // 触发型上传字段
+    EventType event_type = 18; // 开始/进行中/结束事件
+    double start_time = 19; // 场景开始时间(毫秒)
+    double end_time = 20; // 场景结束时间(毫秒)
+    int32 check_count = 21;  // 当前事件唯一标志
+}

@@ -16,6 +16,10 @@ class MockRedisStore(initialState: Map<String, String> = emptyMap()) : VehicleSt
 
     override fun snapshot(): Map<String, String> = state.toMap()
 
+    override fun remove(key: String) {
+        state.remove(key)
+    }
+
     override fun clear() {
         state.clear()
     }

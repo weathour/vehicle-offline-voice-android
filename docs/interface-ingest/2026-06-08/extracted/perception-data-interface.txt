@@ -1,0 +1,170 @@
+数据隔舱-感知数据接口文档
+
+接口格式说明
+  感知数据接口采用读取缓存的方式获取，数据内容使用protobuf直接序列化为字符串进
+行存取。
+
+
+接口详细说明
+
+定位数据
+
+数据内容                 Key                 值类型          备注
+
+定位数据                 Sensor_Location     Location     ﻿
+
+
+                                                            复制代码
+
+syntax = "proto3";
+
+message Location{
+    double timestamp = 1;                    // 时间戳
+    double lon = 2;                          // 经度
+    double lat = 3;                          // 纬度
+    double height = 4;                       // 高程
+    double pitch = 5;                        // 俯仰角
+    double roll = 6;                         // 翻滚角
+    double heading = 7;                      // 航向角
+    double linear_velocity = 8;              // 线速度矢量
+    double velocity_x = 9;                   // 线速度东方向分量
+    double velocity_y = 10;                  // 线速度北方向分量
+    double velocity_z = 11;                  // 线速度垂直方向分量
+    double linear_acceleration = 12;         // 线加速度矢量
+    double acceleration_x = 13;              // 线加速度分量_x
+    double acceleration_y = 14;              // 线加速度分量_y
+    double acceleration_z = 15;              // 线加速度分量_z
+    double angular_velocity = 16;            // 角速度矢量
+    double angular_velocity_x = 17;          // 角速度分量_x
+    double angular_velocity_y = 18;          // 角速度分量_y
+    double angular_velocity_z = 19;          // 角速度分量_z
+    double origin_lon = 20;                  // 参考点经度
+
+                                       1/4
+    double origin_lat = 21;                   // 参考点纬度
+    double utm_position_x = 22;               // 相对参考点 x 坐标
+    double utm_position_y = 23;               // 相对参考点 y 坐标
+    double utm_position_z = 24;               // 相对参考点 z 坐标
+}
+
+障碍物数据
+
+数据内容                 Key                  值类型           备注
+
+障碍物数据                Sensor_Mmobstacl     Obstacle      ﻿
+                     es
+
+
+                                                              复制代码
+
+syntax = "proto3";
+
+
+
+message Obstacle {
+    int32 id = 1;                             // 障碍物 id
+    double center_pos_vehicle_x = 2;          // 车辆坐标系下中心点位置 x 坐标
+（前向）
+    double center_pos_vehicle_y = 3;          // 车辆坐标系下中心点位置 y 坐标
+（左向）
+    double center_pos_vehicle_z = 4;          // 车辆坐标系下中心点位置 z 坐标
+（朝上方向）
+    double center_pos_abs_x = 5;              // 世界坐标系下中心点位置 x 坐标
+（东方向
+    double center_pos_abs_y = 6;              // 世界坐标系下中心点位置 y 坐标
+（北方向）
+    double center_pos_abs_z = 7;              // 世界坐标系下中心点位置 z 坐标
+（朝上方向
+    double velocity_vehicle = 8;
+    double velocity_abs = 9;
+    double theta_vehicle = 10;
+    double theta_abs = 11;
+    double length = 12;                       // 障碍物长度
+    double width = 13;                        // 障碍物宽度
+    double height = 14;                       // 障碍物高度
+    int32 type = 15;                          // 障碍物类别
+    double confidence = 16;                   // 障碍物类别置信度
+    int32 lane_position = 17;                 // 车道线位置
+    int32 fusion_type = 18;                   // 融合障碍物来源标识位
+    int32 cross_id = 19;                      // 路口编号
+
+                                        2/4
+    int32 src_type = 20;                     // 路段 id
+    int32 lane_id = 21;                      // 车道编号
+    string lane_index = 22;                  // 车道序列号
+}
+
+
+
+message MMobstacles{
+    double timestamp = 1;                    // 时间戳
+    int32 obstacle_num = 2;
+    repeated Obstacle obstacles = 3;
+}
+
+车道线数据
+
+数据内容                 Key                 值类型            备注
+
+车道线数据                Sensor_Lanelist     LaneList       ﻿
+
+
+                                                             复制代码
+
+syntax = "proto3";
+
+message Pt {
+    double x = 1;          // X 坐标
+    double y = 2;          // Y 坐标
+}
+
+message Line {
+    int32 lane_type = 1;                // 车道线类型
+    int32 pts_vehicle_num = 2;
+    repeated Pt pts_vehicle = 3;        // 车辆坐标系车道线点集
+    int32 pts_abs_num = 4;
+    repeated Pt pts_abs = 5;            // 世界坐标系车道线点集
+    double confidence = 6;              // 车道线置信度
+}
+
+message LaneList {
+    double timestamp = 1;               // 时间戳
+    int32 lane_num = 2;
+    repeated Line laneline = 3;
+}
+
+
+
+
+交通灯数据
+                                       3/4
+数据内容                 Key                       值类型                备注
+
+交通灯数据                Sensor_Trafficlightli     TrafficLightlist   ﻿
+                     st
+
+
+                                                                       复制代码
+
+syntax = "proto3";
+
+message Traffic_Light {
+    int32 color = 1;             // 交通灯颜色类型
+    double confidence = 2;       // 交通灯检测置信度
+    int32 light_pt_x = 3;        // 交通灯矩阵框左上角点 x 坐标
+    int32 light_pt_y = 4;        // 交通灯矩阵框左上角点 y 坐标
+    int32 height = 5;            // 交通灯矩阵框高度
+    int32 width = 6;             // 交通灯矩阵框宽度
+}
+
+message TrafficLightlist {
+    double timestamp = 1;   // 时间戳
+    int32 traffic_light_num = 2;
+    repeated Traffic_Light trafficlights = 3;
+}
+
+
+
+
+                                             4/4
+

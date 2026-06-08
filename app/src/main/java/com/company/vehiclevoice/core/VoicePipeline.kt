@@ -8,6 +8,8 @@ import com.company.vehiclevoice.audio.AudioSource
 import com.company.vehiclevoice.audio.PcmFrame
 import com.company.vehiclevoice.data.VehicleStateProjector
 import com.company.vehiclevoice.data.VehicleStateStore
+import com.company.vehiclevoice.data.readonly.VehicleReadOnlySnapshotProvider
+import com.company.vehiclevoice.data.readonly.VehicleSnapshotStateMapper
 import com.company.vehiclevoice.kws.KeywordEvent
 import com.company.vehiclevoice.kws.KeywordSpotter
 import com.company.vehiclevoice.log.EventLogSink
@@ -58,7 +60,8 @@ class VoicePipeline(
     private val unityActionMapper: UnityActionMapper,
     private val unityActionJsonEncoder: UnityActionJsonEncoder,
     private val unityEventSink: UnityEventSink,
-    private val logSink: EventLogSink
+    private val logSink: EventLogSink,
+    private val readOnlySnapshotProvider: VehicleReadOnlySnapshotProvider? = null
 ) : AutoCloseable {
     fun runUntilSourceEnds(maxFrames: Int = 2_000): VoicePipelineResult = run(
         VoicePipelineRunConfig(maxFrames = maxFrames)
@@ -190,6 +193,36 @@ class VoicePipeline(
         closeIfNeeded(unityEventSink)
     }
 
+    private fun refreshReadOnlyVehicleStateIfNeeded(intentName: String) {
+        if (!intentName.endsWith("_query") && intentName != "status_query") return
+        val provider = readOnlySnapshotProvider ?: return
+        clearReadOnlyVehicleStateNamespace()
+        runCatching { provider.readSnapshot() }
+            .onSuccess { snapshot ->
+                val mapped = VehicleSnapshotStateMapper.toStateMap(snapshot)
+                mapped.forEach { (key, value) -> stateStore.put(key, value) }
+                logSink.info(
+                    "Vehicle read-only snapshot source=${snapshot.sourceName} " +
+                        "decodedKeys=${snapshot.keyStatuses.values.count { it.decoded }} " +
+                        "connected=${snapshot.diagnostics.connected} " +
+                        "detail=${snapshot.diagnostics.detail} " +
+                        "basic=${mapped["vehicle.summary.basic"] ?: "暂无基础车况"} " +
+                        "warning=${mapped["vehicle.summary.warning"] ?: "暂无告警信息"} " +
+                        "cooperation=${mapped["vehicle.summary.cooperation"] ?: "暂无协作信息"}"
+                )
+            }
+            .onFailure { throwable ->
+                logSink.warn("Vehicle read-only snapshot failed: ${throwable.message}")
+            }
+    }
+
+
+    private fun clearReadOnlyVehicleStateNamespace() {
+        stateStore.snapshot().keys
+            .filter { it.startsWith("vehicle.") }
+            .forEach { stateStore.remove(it) }
+    }
+
     private fun closeIfNeeded(value: Any) {
         if (value is AutoCloseable) {
             runCatching { value.close() }.onFailure { throwable ->
@@ -203,6 +236,7 @@ class VoicePipeline(
         logSink.info("ASR text=${asr.text} confidence=${asr.confidence}")
         val parse = intentParser.parse(asr.text)
         logSink.info("NLU intent=${parse.intent.name} reason=${parse.reason}")
+        refreshReadOnlyVehicleStateIfNeeded(parse.intent.name)
         val mutated = stateProjector.apply(parse, stateStore)
         if (!mutated) logSink.info("State not mutated for intent=${parse.intent.name}")
         val reply = replyTemplateEngine.render(parse, stateStore)

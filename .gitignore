@@ -11,3 +11,5 @@ captures/
 .cxx/
 .kotlin/
 .omx/
+.agents/
+.codex/agents/

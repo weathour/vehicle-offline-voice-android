@@ -4,7 +4,7 @@ import com.company.vehiclevoice.nlu.ParseResult
 
 class UnityActionMapper(private val clockMs: () -> Long = { System.currentTimeMillis() }) {
     fun map(parseResult: ParseResult): UnityAction? {
-        if (!parseResult.isActionable && parseResult.intent.name != "status_query") return null
+        if (!parseResult.isActionable) return null
         return UnityAction(
             action = parseResult.intent.name,
             slots = parseResult.intent.slotMap(),

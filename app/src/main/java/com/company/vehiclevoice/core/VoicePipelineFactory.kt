@@ -14,6 +14,8 @@ import com.company.vehiclevoice.audio.PcmFrame
 import com.company.vehiclevoice.audio.VirtualTtsPcmSource
 import com.company.vehiclevoice.data.MockRedisStore
 import com.company.vehiclevoice.data.VehicleStateProjector
+import com.company.vehiclevoice.data.readonly.RedisVehicleSnapshotProvider
+import com.company.vehiclevoice.data.readonly.VehicleReadOnlySnapshotProvider
 import com.company.vehiclevoice.kws.ScriptedKeywordSpotter
 import com.company.vehiclevoice.kws.VirtualPcmKeywordSpotter
 import com.company.vehiclevoice.kws.VoskKeywordSpotter
@@ -43,14 +45,18 @@ object VoicePipelineFactory {
         logSink: EventLogSink,
         realMicPermissionGranted: () -> Boolean = { false },
         voskModelPath: () -> String? = { null },
-        ttsEngineFactory: () -> TtsEngine = { MockTtsEngine() }
+        ttsEngineFactory: () -> TtsEngine = { MockTtsEngine() },
+        readOnlySnapshotProviderFactory: () -> VehicleReadOnlySnapshotProvider? = { RedisVehicleSnapshotProvider.simulated() }
     ): VoicePipeline = when (mode) {
-        VoiceRuntimeMode.PreviewMock -> createServicePreviewPipeline(logSink)
-        VoiceRuntimeMode.VirtualMicSmoke -> createVirtualMicSmokePipeline(logSink, ttsEngineFactory)
-        VoiceRuntimeMode.RealMicManual -> createRealMicManualPipeline(logSink, realMicPermissionGranted, voskModelPath, ttsEngineFactory)
+        VoiceRuntimeMode.PreviewMock -> createServicePreviewPipeline(logSink, readOnlySnapshotProviderFactory())
+        VoiceRuntimeMode.VirtualMicSmoke -> createVirtualMicSmokePipeline(logSink, ttsEngineFactory, readOnlySnapshotProviderFactory())
+        VoiceRuntimeMode.RealMicManual -> createRealMicManualPipeline(logSink, realMicPermissionGranted, voskModelPath, ttsEngineFactory, readOnlySnapshotProviderFactory())
     }
 
-    fun createServicePreviewPipeline(logSink: EventLogSink): VoicePipeline {
+    fun createServicePreviewPipeline(
+        logSink: EventLogSink,
+        readOnlySnapshotProvider: VehicleReadOnlySnapshotProvider? = RedisVehicleSnapshotProvider.simulated()
+    ): VoicePipeline {
         val frames = buildList {
             add(PcmFrame.silence(sequence = 0))
             add(PcmFrame.silence(sequence = 1))
@@ -75,36 +81,46 @@ object VoicePipelineFactory {
             unityActionMapper = UnityActionMapper(clockMs = { 1_234_567_890L }),
             unityActionJsonEncoder = UnityActionJsonEncoder(),
             unityEventSink = RecordingUnityEventSink(),
-            logSink = logSink
+            logSink = logSink,
+            readOnlySnapshotProvider = readOnlySnapshotProvider
         )
     }
 
 
     fun createVirtualMicSmokePipeline(
         logSink: EventLogSink,
-        ttsEngineFactory: () -> TtsEngine = { MockTtsEngine() }
+        ttsEngineFactory: () -> TtsEngine = { MockTtsEngine() },
+        readOnlySnapshotProvider: VehicleReadOnlySnapshotProvider? = RedisVehicleSnapshotProvider.simulated()
     ): VoicePipeline = createPipeline(
         audioSource = VirtualTtsPcmSource.singleCommand("打开空调"),
         keywordSpotter = VirtualPcmKeywordSpotter(),
         asrEngine = VirtualPcmCommandAsrEngine(),
         ttsEngine = ttsEngineFactory(),
-        logSink = logSink
+        logSink = logSink,
+        readOnlySnapshotProvider = readOnlySnapshotProvider
     )
 
     fun createRealMicManualPipeline(
         logSink: EventLogSink,
         realMicPermissionGranted: () -> Boolean,
         voskModelPath: () -> String?,
-        ttsEngineFactory: () -> TtsEngine = { MockTtsEngine() }
+        ttsEngineFactory: () -> TtsEngine = { MockTtsEngine() },
+        readOnlySnapshotProvider: VehicleReadOnlySnapshotProvider? = RedisVehicleSnapshotProvider.simulated()
     ): VoicePipeline {
         val modelPath = voskModelPath()
             ?: error("RealMicManual requires a packaged/copied offline Vosk model; use PreviewMock or VirtualMicSmoke for non-real modes")
         return createPipeline(
             audioSource = AndroidAudioRecordSource(permissionGranted = realMicPermissionGranted),
             keywordSpotter = VoskKeywordSpotter(modelPath = modelPath),
+            // Keep the real microphone ASR open-model for the current Chinese Vosk model.
+            // Passing unsegmented Chinese phrases as restricted grammar makes Vosk treat each
+            // full phrase as an out-of-vocabulary word and can collapse recognition to "[unk]".
+            // Domain robustness is handled in RuleIntentParser normalization until we add a
+            // tested segmented grammar / custom language model.
             asrEngine = VoskOfflineAsrEngine(modelPath = modelPath),
             ttsEngine = ttsEngineFactory(),
-            logSink = logSink
+            logSink = logSink,
+            readOnlySnapshotProvider = readOnlySnapshotProvider
         )
     }
 
@@ -113,7 +129,8 @@ object VoicePipelineFactory {
         keywordSpotter: com.company.vehiclevoice.kws.KeywordSpotter,
         asrEngine: AsrEngine = ScriptedAsrEngine.single("打开空调"),
         ttsEngine: TtsEngine = MockTtsEngine(),
-        logSink: EventLogSink
+        logSink: EventLogSink,
+        readOnlySnapshotProvider: VehicleReadOnlySnapshotProvider? = RedisVehicleSnapshotProvider.simulated()
     ): VoicePipeline = VoicePipeline(
         audioSource = audioSource,
         keywordSpotter = keywordSpotter,
@@ -127,6 +144,7 @@ object VoicePipelineFactory {
         unityActionMapper = UnityActionMapper(clockMs = { 1_234_567_890L }),
         unityActionJsonEncoder = UnityActionJsonEncoder(),
         unityEventSink = RecordingUnityEventSink(),
-        logSink = logSink
+        logSink = logSink,
+        readOnlySnapshotProvider = readOnlySnapshotProvider
     )
 }
