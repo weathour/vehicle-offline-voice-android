@@ -32,12 +32,16 @@ data class VoicePipelineRunConfig(
     val maxFrames: Int = 2_000,
     val maxUtterances: Int = 1,
     val continueAfterUtterance: Boolean = false,
-    val rmsLogEveryFrames: Int = 0
+    val rmsLogEveryFrames: Int = 0,
+    val wakeTimeoutFrames: Int = 0,
+    val maxUtteranceFrames: Int = 300
 ) {
     init {
         require(maxFrames > 0) { "maxFrames must be positive" }
         require(maxUtterances > 0) { "maxUtterances must be positive" }
         require(rmsLogEveryFrames >= 0) { "rmsLogEveryFrames must be non-negative" }
+        require(wakeTimeoutFrames >= 0) { "wakeTimeoutFrames must be non-negative" }
+        require(maxUtteranceFrames > 0) { "maxUtteranceFrames must be positive" }
     }
 }
 
@@ -69,6 +73,7 @@ class VoicePipeline(
         var unityJson: String? = null
         var utterancesHandled = 0
         val utteranceFrames = mutableListOf<PcmFrame>()
+        var framesSinceWake = 0
 
         logSink.info("Pipeline state=listening_start maxFrames=${config.maxFrames} maxUtterances=${config.maxUtterances}")
         audioSource.start()
@@ -91,9 +96,20 @@ class VoicePipeline(
                             wakeDetected = true
                             vadEngine.reset()
                             logSink.info("Pipeline state=wake_detected frame=${event.frameSequence}")
+                            framesSinceWake = 0
                             logSink.info("KWS wake keyword=${event.keyword} confidence=${event.confidence} frame=${event.frameSequence}")
                         }
                     }
+                    continue
+                }
+
+                framesSinceWake += 1
+                if (config.wakeTimeoutFrames > 0 && utteranceFrames.isEmpty() && framesSinceWake > config.wakeTimeoutFrames) {
+                    logSink.warn("Pipeline state=wake_timeout framesSinceWake=$framesSinceWake")
+                    wakeDetected = false
+                    keywordSpotter.reset()
+                    vadEngine.reset()
+                    framesSinceWake = 0
                     continue
                 }
 
@@ -106,6 +122,26 @@ class VoicePipeline(
                     }
                     is VadEvent.Speech -> {
                         utteranceFrames += vad.frame
+                        if (utteranceFrames.size >= config.maxUtteranceFrames) {
+                            logSink.warn("Pipeline state=utterance_max_frames frames=${utteranceFrames.size}")
+                            logSink.info("Pipeline state=recognizing frames=${utteranceFrames.size}")
+                            val result = handleUtterance(utteranceFrames)
+                            utterancesHandled += 1
+                            asrText = result.asrText
+                            intentName = result.intentName
+                            reply = result.reply
+                            unityJson = result.unityJson
+                            utteranceFrames.clear()
+                            if (config.continueAfterUtterance && utterancesHandled < config.maxUtterances) {
+                                wakeDetected = false
+                                framesSinceWake = 0
+                                keywordSpotter.reset()
+                                vadEngine.reset()
+                                logSink.info("Pipeline state=listening_resume utterances=$utterancesHandled")
+                            } else {
+                                break
+                            }
+                        }
                     }
                     is VadEvent.SpeechEnd -> {
                         logSink.info("VAD speech_end rms=${vad.rms} frames=${utteranceFrames.size}")
@@ -119,6 +155,7 @@ class VoicePipeline(
                         utteranceFrames.clear()
                         if (config.continueAfterUtterance && utterancesHandled < config.maxUtterances) {
                             wakeDetected = false
+                            framesSinceWake = 0
                             keywordSpotter.reset()
                             vadEngine.reset()
                             logSink.info("Pipeline state=listening_resume utterances=$utterancesHandled")
