@@ -23,4 +23,3 @@ class VehicleStateProjector(private val defaultTemperatureCelsius: Int = 24) {
     private fun currentTemperature(store: VehicleStateStore): Int =
         store.get("cabin_temperature_celsius")?.toIntOrNull() ?: defaultTemperatureCelsius
 }
-
