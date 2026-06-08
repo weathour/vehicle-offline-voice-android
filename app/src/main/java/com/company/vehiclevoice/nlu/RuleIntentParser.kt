@@ -9,17 +9,17 @@ class RuleIntentParser : IntentParser {
         }
 
         return when {
-            matchesAny(normalized, "打开空调", "开启空调", "开空调", "空调打开", "把空调打开") ->
+            matchesAny(normalized, "打开空调", "开启空调", "开空调", "空调打开", "把空调打开", "空调开开", "开下空调") ->
                 action("air_conditioner_on", "air_conditioner", "on")
-            matchesAny(normalized, "关闭空调", "关空调", "空调关闭", "把空调关掉") ->
+            matchesAny(normalized, "关闭空调", "关空调", "空调关闭", "把空调关掉", "空调关了", "关掉空调") ->
                 action("air_conditioner_off", "air_conditioner", "off")
-            matchesAny(normalized, "调高温度", "升高温度", "温度调高", "热一点") ->
+            matchesAny(normalized, "调高温度", "升高温度", "温度调高", "热一点", "太冷了", "温度高一点") ->
                 action("temperature_up", "temperature", "up")
-            matchesAny(normalized, "调低温度", "降低温度", "温度调低", "冷一点") ->
+            matchesAny(normalized, "调低温度", "降低温度", "温度调低", "冷一点", "太热了", "温度低一点") ->
                 action("temperature_down", "temperature", "down")
-            matchesAny(normalized, "打开车窗", "开车窗", "车窗打开", "把车窗打开") ->
+            matchesAny(normalized, "打开车窗", "开车窗", "车窗打开", "把车窗打开", "降下车窗", "车窗降下来") ->
                 action("window_open", "window", "open")
-            matchesAny(normalized, "关闭车窗", "关车窗", "车窗关闭", "把车窗关上") ->
+            matchesAny(normalized, "关闭车窗", "关车窗", "车窗关闭", "把车窗关上", "升起车窗", "车窗升起来") ->
                 action("window_close", "window", "close")
             matchesAny(normalized, "切换场景", "切到场景", "切换模式") ->
                 action("scene_switch", "scene", "switch")
