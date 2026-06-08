@@ -93,6 +93,19 @@ Recommended objective:
 
 ## 5. Suggested next-stage milestones
 
+The next large stage is now recorded as **8 goals** in `docs/next-stage-offline-voice-core-goals.md`:
+
+1. G1 Runtime mode and real microphone capture smoke.
+2. G2 Always-on foreground service lifecycle hardening.
+3. G3 Local KWS adapter integration.
+4. G4 Real-input VAD session and endpointing.
+5. G5 Offline ASR adapter integration.
+6. G6 Rule NLU and local vehicle-state command coverage.
+7. G7 Chinese reply and TTS adapter.
+8. G8 Offline core loop end-to-end QA gate.
+
+The older M11-M16 outline below is retained as historical continuity, but new execution should use the 8-goal split above as the primary work breakdown.
+
 ### M11: Real microphone capture smoke mode
 
 Goal:

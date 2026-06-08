@@ -73,7 +73,7 @@ The ordinary Android phone smoke test has matched the expected pre-device mock-c
 - `docs/device-smoke-result-2026-06-08.md`
 - `docs/handoff-next-stage.md`
 
-Next development should start from real microphone capture smoke mode, then offline KWS/ASR integration, while preserving the no-`INTERNET` constraint.
+Next development should start from the documented **Offline Voice Core Loop** stage: real microphone capture, always-on lifecycle hardening, local KWS, VAD endpointing, offline ASR, rule NLU/local state, Chinese reply/TTS, and an end-to-end QA gate while preserving the no-`INTERNET` constraint. See `docs/next-stage-offline-voice-core-goals.md`.
 
 ## Final phone-only commands
 
