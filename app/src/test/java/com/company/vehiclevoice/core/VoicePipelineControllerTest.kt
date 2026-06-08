@@ -30,6 +30,23 @@ class VoicePipelineControllerTest {
         assertEquals(VoicePipelineController.State.Closed, controller.currentState())
     }
 
+
+    @Test
+    fun completedController_canStartAgainWithoutDuplicateConcurrentRun() {
+        val logSink = RecordingEventLogSink()
+        val controller = VoicePipelineController(
+            pipelineFactory = { VoicePipelineFactory.createServicePreviewPipeline(logSink) },
+            logSink = logSink
+        )
+
+        assertTrue(controller.start())
+        waitForState(controller, VoicePipelineController.State.Completed)
+        assertTrue(controller.start())
+        assertFalse(controller.start())
+        waitForState(controller, VoicePipelineController.State.Completed)
+        controller.close()
+    }
+
     @Test
     fun closedController_refusesRestart() {
         val controller = VoicePipelineController(

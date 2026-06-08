@@ -24,8 +24,22 @@ data class VoicePipelineResult(
     val reply: String?,
     val unityJson: String?,
     val stateSnapshot: Map<String, String>,
-    val framesRead: Int
+    val framesRead: Int,
+    val utterancesHandled: Int = if (asrText != null) 1 else 0
 )
+
+data class VoicePipelineRunConfig(
+    val maxFrames: Int = 2_000,
+    val maxUtterances: Int = 1,
+    val continueAfterUtterance: Boolean = false,
+    val rmsLogEveryFrames: Int = 0
+) {
+    init {
+        require(maxFrames > 0) { "maxFrames must be positive" }
+        require(maxUtterances > 0) { "maxUtterances must be positive" }
+        require(rmsLogEveryFrames >= 0) { "rmsLogEveryFrames must be non-negative" }
+    }
+}
 
 class VoicePipeline(
     private val audioSource: AudioSource,
@@ -42,20 +56,33 @@ class VoicePipeline(
     private val unityEventSink: UnityEventSink,
     private val logSink: EventLogSink
 ) {
-    fun runUntilSourceEnds(maxFrames: Int = 2_000): VoicePipelineResult {
+    fun runUntilSourceEnds(maxFrames: Int = 2_000): VoicePipelineResult = run(
+        VoicePipelineRunConfig(maxFrames = maxFrames)
+    )
+
+    fun run(config: VoicePipelineRunConfig): VoicePipelineResult {
         var framesRead = 0
         var wakeDetected = false
         var asrText: String? = null
         var intentName: String? = null
         var reply: String? = null
         var unityJson: String? = null
+        var utterancesHandled = 0
         val utteranceFrames = mutableListOf<PcmFrame>()
 
+        logSink.info("Pipeline state=listening_start maxFrames=${config.maxFrames} maxUtterances=${config.maxUtterances}")
         audioSource.start()
         try {
-            while (framesRead < maxFrames) {
+            while (framesRead < config.maxFrames && utterancesHandled < config.maxUtterances) {
+                if (Thread.currentThread().isInterrupted) {
+                    logSink.warn("Pipeline state=interrupted frames=$framesRead")
+                    break
+                }
                 val frame = audioSource.read() ?: break
                 framesRead += 1
+                if (config.rmsLogEveryFrames > 0 && framesRead % config.rmsLogEveryFrames == 0) {
+                    logSink.info("Audio frame=${frame.sequence} rms=${frame.normalizedRms()}")
+                }
 
                 if (!wakeDetected) {
                     when (val event = keywordSpotter.accept(frame)) {
@@ -63,6 +90,7 @@ class VoicePipeline(
                         is KeywordEvent.Wake -> {
                             wakeDetected = true
                             vadEngine.reset()
+                            logSink.info("Pipeline state=wake_detected frame=${event.frameSequence}")
                             logSink.info("KWS wake keyword=${event.keyword} confidence=${event.confidence} frame=${event.frameSequence}")
                         }
                     }
@@ -73,6 +101,7 @@ class VoicePipeline(
                     is VadEvent.Silence -> Unit
                     is VadEvent.SpeechStart -> {
                         utteranceFrames += vad.preRollFrames.ifEmpty { listOf(vad.frame) }
+                        logSink.info("Pipeline state=recording_utterance startFrame=${vad.frame.sequence}")
                         logSink.info("VAD speech_start rms=${vad.rms}")
                     }
                     is VadEvent.Speech -> {
@@ -80,17 +109,28 @@ class VoicePipeline(
                     }
                     is VadEvent.SpeechEnd -> {
                         logSink.info("VAD speech_end rms=${vad.rms} frames=${utteranceFrames.size}")
+                        logSink.info("Pipeline state=recognizing frames=${utteranceFrames.size}")
                         val result = handleUtterance(utteranceFrames)
+                        utterancesHandled += 1
                         asrText = result.asrText
                         intentName = result.intentName
                         reply = result.reply
                         unityJson = result.unityJson
-                        break
+                        utteranceFrames.clear()
+                        if (config.continueAfterUtterance && utterancesHandled < config.maxUtterances) {
+                            wakeDetected = false
+                            keywordSpotter.reset()
+                            vadEngine.reset()
+                            logSink.info("Pipeline state=listening_resume utterances=$utterancesHandled")
+                        } else {
+                            break
+                        }
                     }
                 }
             }
         } finally {
             audioSource.stop()
+            logSink.info("Pipeline state=audio_released frames=$framesRead utterances=$utterancesHandled")
         }
 
         return VoicePipelineResult(
@@ -100,7 +140,8 @@ class VoicePipeline(
             reply = reply,
             unityJson = unityJson,
             stateSnapshot = stateStore.snapshot(),
-            framesRead = framesRead
+            framesRead = framesRead,
+            utterancesHandled = utterancesHandled
         )
     }
 
@@ -127,7 +168,8 @@ class VoicePipeline(
             reply = reply,
             unityJson = unityJson,
             stateSnapshot = stateStore.snapshot(),
-            framesRead = frames.size
+            framesRead = frames.size,
+            utterancesHandled = 1
         )
     }
 }
