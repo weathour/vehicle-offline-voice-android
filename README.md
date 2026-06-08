@@ -2,7 +2,7 @@
 
 Linux/Codex-first Android Kotlin project for an offline vehicle voice MVP.
 
-Current stage: **pre-device local completion**. The APK builds locally and contains a mock/rule offline voice pipeline for 常驻 KWS + VAD + ASR + 规则语义 + Mock Redis + 模板/TTS + Unity action JSON. Real phone installation is intentionally deferred to the final device step.
+Current stage: **real-device offline voice core-loop baseline**. The APK builds locally and now supports a real microphone + local Vosk wake/ASR + VAD + rule NLU + Mock/local vehicle state + Chinese TTS + Unity action JSON debug loop on an ordinary Android phone, while preserving mock/scripted paths for regression.
 
 ## Environment
 
@@ -40,9 +40,9 @@ app/build/outputs/apk/debug/app-debug.apk
 ## Implemented local modules
 
 - `audio`: PCM frame model, RMS, fake PCM source, guarded Android `AudioRecord` source.
-- `kws`: keyword spotter interface and scripted mock KWS.
+- `kws`: keyword spotter interface, scripted mock KWS, and local Vosk wake adapter.
 - `vad`: energy-based VAD with speech start/end events.
-- `asr`: ASR interface and scripted mock ASR.
+- `asr`: ASR interface, scripted mock ASR, and local Vosk offline ASR adapter.
 - `nlu`: Chinese rule intent parser with unsafe/fallback rejection.
 - `data`: in-memory Mock Redis-like vehicle state store.
 - `template`: Chinese reply template engine.
@@ -55,25 +55,27 @@ app/build/outputs/apk/debug/app-debug.apk
 
 - `MainActivity` requests microphone and notification permissions before starting the service.
 - `VoiceForegroundService` declares and starts with microphone foreground service type.
-- Service currently runs a finite preview mock pipeline and logs KWS/VAD/ASR/NLU/TTS/Unity JSON events.
-- `AndroidAudioRecordSource` exists as the real microphone seam and refuses to start without `RECORD_AUDIO`.
+- Service supports preview/mock, virtual-mic smoke, and real-microphone manual validation modes.
+- Real-microphone mode logs KWS/VAD/ASR/NLU/TTS/Unity JSON events and is observable through the in-app debug panel.
+- `AndroidAudioRecordSource` refuses to start without `RECORD_AUDIO`.
 
 ## Development constraints
 
 - No Unity project coupling in this repository.
 - No `INTERNET` permission.
 - No cloud ASR/TTS or external Redis.
-- Do not install to phone until final device validation.
-- Replace KWS/ASR/TTS engines behind existing interfaces instead of rewriting business logic.
+- Install to phone only after local verification gates pass.
+- Replace or tune KWS/ASR/TTS engines behind existing interfaces instead of rewriting business logic.
 
 ## Current handoff
 
-The ordinary Android phone smoke test has matched the expected pre-device mock-chain behavior. See:
+The ordinary Android phone smoke test has progressed from mock-chain verification to a real offline voice-loop baseline. Latest observed successful commands include `小车小车 -> 打开空调` and `小车小车 -> 关闭空调`. See:
 
+- `docs/current-real-device-voice-status-2026-06-08.md`
 - `docs/device-smoke-result-2026-06-08.md`
 - `docs/handoff-next-stage.md`
 
-Next development should start from the documented **Offline Voice Core Loop** stage: real microphone capture, always-on lifecycle hardening, local KWS, VAD endpointing, offline ASR, rule NLU/local state, Chinese reply/TTS, and an end-to-end QA gate while preserving the no-`INTERNET` constraint. See `docs/next-stage-offline-voice-core-goals.md`.
+Next development should focus on **Real-device Voice Robustness and Integration Prep**: command recognition matrix, ASR correction/rule hardening, wake reliability tuning, phone-side debug UX, soak/resource stability, and Unity/RK3588S handoff.
 
 ## Final phone-only commands
 

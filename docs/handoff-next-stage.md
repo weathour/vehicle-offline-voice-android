@@ -4,6 +4,31 @@ Date: 2026-06-08
 Project: `VehicleOfflineVoice`
 Path: `/home/weathour/document/programs/chongqingUNITY/android-apk`
 
+
+## 0. Update after real-device voice-loop debugging
+
+As of 2026-06-08 afternoon, the repository has advanced beyond the original pre-device/mock-chain handoff described below.
+
+Latest phone-side debugging has confirmed a real local offline loop:
+
+```text
+真实麦克风 -> Vosk KWS -> VAD -> Vosk 离线 ASR -> 规则 NLU -> 本地/Mock 状态 -> 中文 TTS -> Unity action JSON
+```
+
+Observed successful commands include:
+
+- `小车小车` wake detected;
+- `打开 空调` -> `air_conditioner_on` -> `已为你打开空调`;
+- `关闭 空调` -> `air_conditioner_off` -> `已为你关闭空调`.
+
+A fallback case such as `ASR text=速度 怎样` was also observed, indicating that the next work should focus on recognition robustness and rule/correction coverage rather than basic microphone/service bring-up.
+
+The current detailed status and the recommended next stage are recorded in:
+
+- `docs/current-real-device-voice-status-2026-06-08.md`
+
+The historical handoff below is retained for continuity.
+
 ## 1. Current handoff status
 
 The current Android APK is an independent native Kotlin project. It does not depend on the parent Unity project.
