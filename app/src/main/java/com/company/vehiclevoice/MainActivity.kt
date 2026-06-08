@@ -11,10 +11,12 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import com.company.vehiclevoice.core.VoiceRuntimeMode
 
 class MainActivity : Activity() {
     private lateinit var logView: TextView
     private var pendingStartAfterPermission = false
+    private var pendingModeAfterPermission: VoiceRuntimeMode = VoiceRuntimeMode.PreviewMock
     private val serviceLogListener: (String) -> Unit = { line ->
         runOnUiThread { logView.append("$line\n") }
     }
@@ -54,9 +56,23 @@ class MainActivity : Activity() {
         root.addView(title)
 
         root.addView(Button(this).apply {
-            text = "启动语音服务"
+            text = "启动 Mock 预览"
             setOnClickListener {
-                startVoiceServiceWhenPermissionsReady()
+                startVoiceServiceWhenPermissionsReady(VoiceRuntimeMode.PreviewMock)
+            }
+        })
+
+        root.addView(Button(this).apply {
+            text = "启动虚拟麦克风烟测"
+            setOnClickListener {
+                startVoiceServiceWhenPermissionsReady(VoiceRuntimeMode.VirtualMicSmoke)
+            }
+        })
+
+        root.addView(Button(this).apply {
+            text = "启动真实麦克风手动验证"
+            setOnClickListener {
+                startVoiceServiceWhenPermissionsReady(VoiceRuntimeMode.RealMicManual)
             }
         })
 
@@ -88,15 +104,16 @@ class MainActivity : Activity() {
         return root
     }
 
-    private fun startVoiceServiceWhenPermissionsReady() {
+    private fun startVoiceServiceWhenPermissionsReady(mode: VoiceRuntimeMode) {
         val permissions = missingRuntimePermissions()
         if (permissions.isNotEmpty()) {
             pendingStartAfterPermission = true
+            pendingModeAfterPermission = mode
             requestPermissions(permissions.toTypedArray(), REQUEST_PERMISSIONS)
             appendLog("已请求运行时权限，授权后再启动服务：${permissions.joinToString()}")
             return
         }
-        startVoiceService()
+        startVoiceService(mode)
     }
 
     private fun missingRuntimePermissions(): List<String> {
@@ -113,14 +130,14 @@ class MainActivity : Activity() {
         return permissions
     }
 
-    private fun startVoiceService() {
-        val intent = Intent(this, VoiceForegroundService::class.java)
+    private fun startVoiceService(mode: VoiceRuntimeMode) {
+        val intent = Intent(this, VoiceForegroundService::class.java).putExtra(VoiceRuntimeMode.EXTRA_NAME, mode.wireValue)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)
         } else {
             startService(intent)
         }
-        appendLog("已发送启动前台服务命令")
+        appendLog("已发送启动前台服务命令：${mode.displayName}")
     }
 
     override fun onRequestPermissionsResult(
@@ -137,11 +154,12 @@ class MainActivity : Activity() {
 
         if (denied.isEmpty()) {
             appendLog("运行时权限已授权")
-            if (pendingStartAfterPermission) startVoiceService()
+            if (pendingStartAfterPermission) startVoiceService(pendingModeAfterPermission)
         } else {
             appendLog("权限被拒绝，未启动真实麦克风相关服务：${denied.joinToString()}")
         }
         pendingStartAfterPermission = false
+        pendingModeAfterPermission = VoiceRuntimeMode.PreviewMock
     }
 
     private fun stopVoiceService() {

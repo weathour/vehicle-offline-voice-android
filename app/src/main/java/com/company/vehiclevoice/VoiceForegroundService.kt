@@ -9,26 +9,33 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.Manifest
+import android.content.pm.PackageManager
 import com.company.vehiclevoice.core.VoicePipelineController
 import com.company.vehiclevoice.core.VoicePipelineFactory
+import com.company.vehiclevoice.core.VoiceRuntimeMode
 import com.company.vehiclevoice.log.AndroidEventLogSink
 
 class VoiceForegroundService : Service() {
     private val logSink = AndroidEventLogSink()
     private var controller: VoicePipelineController? = null
+    private var currentMode: VoiceRuntimeMode = VoiceRuntimeMode.PreviewMock
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         VoiceLogger.info("VoiceForegroundService created")
-        controller = VoicePipelineController(
-            pipelineFactory = { VoicePipelineFactory.createServicePreviewPipeline(logSink) },
-            logSink = logSink
-        )
+        controller = newController(currentMode)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        VoiceLogger.info("VoiceForegroundService start command")
+        val requestedMode = VoiceRuntimeMode.fromWireValue(intent?.getStringExtra(VoiceRuntimeMode.EXTRA_NAME))
+        VoiceLogger.info("VoiceForegroundService start command mode=${requestedMode.wireValue}")
+        if (requestedMode != currentMode || controller == null) {
+            controller?.close()
+            currentMode = requestedMode
+            controller = newController(requestedMode)
+        }
         startForegroundWithMicrophoneType()
         controller?.start()
         return START_STICKY
@@ -42,6 +49,20 @@ class VoiceForegroundService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+
+    private fun newController(mode: VoiceRuntimeMode): VoicePipelineController = VoicePipelineController(
+        pipelineFactory = {
+            VoicePipelineFactory.createServicePipeline(
+                mode = mode,
+                logSink = logSink,
+                realMicPermissionGranted = {
+                    checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                }
+            )
+        },
+        logSink = logSink
+    )
 
     private fun buildNotification(): Notification {
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

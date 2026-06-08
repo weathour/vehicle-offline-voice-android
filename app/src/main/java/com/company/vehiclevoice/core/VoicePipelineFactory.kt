@@ -4,8 +4,11 @@ import com.company.vehiclevoice.action.RecordingUnityEventSink
 import com.company.vehiclevoice.action.UnityActionJsonEncoder
 import com.company.vehiclevoice.action.UnityActionMapper
 import com.company.vehiclevoice.asr.ScriptedAsrEngine
+import com.company.vehiclevoice.audio.AndroidAudioRecordSource
+import com.company.vehiclevoice.audio.AudioSource
 import com.company.vehiclevoice.audio.FakePcmSource
 import com.company.vehiclevoice.audio.PcmFrame
+import com.company.vehiclevoice.audio.VirtualTtsPcmSource
 import com.company.vehiclevoice.data.MockRedisStore
 import com.company.vehiclevoice.data.VehicleStateProjector
 import com.company.vehiclevoice.kws.ScriptedKeywordSpotter
@@ -16,6 +19,16 @@ import com.company.vehiclevoice.tts.MockTtsEngine
 import com.company.vehiclevoice.vad.EnergyVadEngine
 
 object VoicePipelineFactory {
+    fun createServicePipeline(
+        mode: VoiceRuntimeMode,
+        logSink: EventLogSink,
+        realMicPermissionGranted: () -> Boolean = { false }
+    ): VoicePipeline = when (mode) {
+        VoiceRuntimeMode.PreviewMock -> createServicePreviewPipeline(logSink)
+        VoiceRuntimeMode.VirtualMicSmoke -> createVirtualMicSmokePipeline(logSink)
+        VoiceRuntimeMode.RealMicManual -> createRealMicManualPipeline(logSink, realMicPermissionGranted)
+    }
+
     fun createServicePreviewPipeline(logSink: EventLogSink): VoicePipeline {
         val frames = buildList {
             add(PcmFrame.silence(sequence = 0))
@@ -44,4 +57,40 @@ object VoicePipelineFactory {
             logSink = logSink
         )
     }
+
+
+    fun createVirtualMicSmokePipeline(logSink: EventLogSink): VoicePipeline = createPipeline(
+        audioSource = VirtualTtsPcmSource.singleCommand("打开空调"),
+        keywordSpotter = ScriptedKeywordSpotter(wakeSequences = setOf(5L)),
+        logSink = logSink
+    )
+
+    fun createRealMicManualPipeline(
+        logSink: EventLogSink,
+        realMicPermissionGranted: () -> Boolean
+    ): VoicePipeline = createPipeline(
+        audioSource = AndroidAudioRecordSource(permissionGranted = realMicPermissionGranted),
+        keywordSpotter = ScriptedKeywordSpotter(wakeSequences = setOf(10L)),
+        logSink = logSink
+    )
+
+    private fun createPipeline(
+        audioSource: AudioSource,
+        keywordSpotter: com.company.vehiclevoice.kws.KeywordSpotter,
+        logSink: EventLogSink
+    ): VoicePipeline = VoicePipeline(
+        audioSource = audioSource,
+        keywordSpotter = keywordSpotter,
+        vadEngine = EnergyVadEngine(),
+        asrEngine = ScriptedAsrEngine.single("打开空调"),
+        intentParser = RuleIntentParser(),
+        stateStore = MockRedisStore(),
+        stateProjector = VehicleStateProjector(),
+        replyTemplateEngine = ReplyTemplateEngine(),
+        ttsEngine = MockTtsEngine(),
+        unityActionMapper = UnityActionMapper(clockMs = { 1_234_567_890L }),
+        unityActionJsonEncoder = UnityActionJsonEncoder(),
+        unityEventSink = RecordingUnityEventSink(),
+        logSink = logSink
+    )
 }

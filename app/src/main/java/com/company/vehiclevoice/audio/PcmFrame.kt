@@ -58,5 +58,24 @@ data class PcmFrame(
             timestampMs = timestampMs,
             sequence = sequence
         )
+
+        fun syntheticTone(
+            sequence: Long,
+            amplitude: Short,
+            period: Int,
+            sampleRateHz: Int = DEFAULT_SAMPLE_RATE_HZ,
+            sampleCount: Int = DEFAULT_FRAME_SAMPLES,
+            timestampMs: Long = sequence * 100L
+        ): PcmFrame {
+            require(period > 1) { "period must be greater than 1" }
+            return PcmFrame(
+                samples = ShortArray(sampleCount) { index ->
+                    if ((index / period) % 2 == 0) amplitude else (-amplitude).toShort()
+                },
+                sampleRateHz = sampleRateHz,
+                timestampMs = timestampMs,
+                sequence = sequence
+            )
+        }
     }
 }
