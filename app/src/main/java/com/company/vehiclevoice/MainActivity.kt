@@ -70,13 +70,16 @@ class MainActivity : Activity() {
         super.onPause()
     }
 
-    private fun buildContentView(): LinearLayout {
+    private fun buildContentView(): ScrollView {
+        val page = ScrollView(this).apply {
+            isFillViewport = true
+        }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(32, 32, 32, 32)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
+                ViewGroup.LayoutParams.WRAP_CONTENT
             )
         }
 
@@ -131,11 +134,11 @@ class MainActivity : Activity() {
         scrollView.addView(logView)
         root.addView(scrollView, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
-            0,
-            1f
+            dp(220)
         ))
 
-        return root
+        page.addView(root)
+        return page
     }
 
     private fun buildRedisConfigPanel(): LinearLayout {
@@ -274,6 +277,8 @@ class MainActivity : Activity() {
         textSize = 15f
         setTextIsSelectable(true)
     }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private fun resetDebugPanel() {
         if (!::statusPanel.isInitialized) return
