@@ -10,7 +10,7 @@ import java.io.File
 class VoskOfflineAsrEngine(
     modelPath: String,
     private val sampleRateHz: Float = PcmFrame.DEFAULT_SAMPLE_RATE_HZ.toFloat(),
-    private val grammar: List<String>? = DEFAULT_COMMAND_GRAMMAR
+    private val grammar: List<String>? = null
 ) : AsrEngine, AutoCloseable {
     private val model: Model
 
