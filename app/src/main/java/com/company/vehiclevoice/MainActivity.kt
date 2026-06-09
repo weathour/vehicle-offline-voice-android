@@ -18,6 +18,7 @@ import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import com.company.vehiclevoice.data.readonly.RedisVehicleSnapshotProvider
@@ -51,6 +52,7 @@ class MainActivity : Activity() {
     private lateinit var developerPanel: LinearLayout
     private lateinit var developerToggleButton: Button
     private lateinit var updatePanel: TextView
+    private lateinit var updateProgressBar: ProgressBar
     private var pendingStartAfterPermission = false
     private var pendingModeAfterPermission: VoiceRuntimeMode = VoiceRuntimeMode.PreviewMock
     private val serviceLogListener: (String) -> Unit = { line ->
@@ -274,6 +276,7 @@ class MainActivity : Activity() {
                 UiLogBus.clear()
                 connectionPanel.text = "连接诊断：未测试"
                 updatePanel.text = "版本更新：未检查"
+                resetUpdateProgress()
             }
         })
         developerPanel.addView(Button(this).apply {
@@ -282,6 +285,15 @@ class MainActivity : Activity() {
         })
         updatePanel = debugLine("版本更新", "未检查")
         developerPanel.addView(updatePanel)
+        updateProgressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            progress = 0
+            visibility = View.GONE
+        }
+        developerPanel.addView(updateProgressBar, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
         container.addView(developerPanel)
         return container
     }
@@ -449,6 +461,7 @@ class MainActivity : Activity() {
     }
 
     private fun checkGitHubVersionList() {
+        resetUpdateProgress()
         updatePanel.text = "版本更新：正在读取 GitHub Releases ..."
         appendLog("开始检查 GitHub 版本列表")
         thread(name = "vehicle-github-release-list") {
@@ -488,18 +501,26 @@ class MainActivity : Activity() {
             updatePanel.text = "版本更新：${release.tagName} 没有 APK 资源"
             return
         }
+        updateProgressBar.visibility = View.VISIBLE
+        updateProgressBar.isIndeterminate = true
+        updateProgressBar.progress = 0
         updatePanel.text = "版本更新：正在下载 ${release.tagName} ..."
         appendLog("开始下载版本：${release.tagName}")
         thread(name = "vehicle-github-apk-download") {
             val result = runCatching {
-                GitHubReleaseUpdateClient(this).downloadApk(apkUrl)
+                GitHubReleaseUpdateClient(this).downloadApk(apkUrl) { progress ->
+                    runOnUiThread { updateDownloadProgress(release.tagName, progress.percent) }
+                }
             }
             runOnUiThread {
                 result.onSuccess { apkFile ->
+                    updateProgressBar.isIndeterminate = false
+                    updateProgressBar.progress = 100
                     updatePanel.text = "版本更新：${release.tagName} 下载完成，准备安装"
                     installDownloadedApk(apkFile.name)
                 }.onFailure { throwable ->
                     val message = throwable.message ?: throwable::class.java.simpleName
+                    resetUpdateProgress()
                     updatePanel.text = "版本更新：下载失败 $message"
                     appendLog("版本 ${release.tagName} 下载失败：$message")
                 }
@@ -507,8 +528,30 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun updateDownloadProgress(tagName: String, percent: Int?) {
+        if (!::updateProgressBar.isInitialized) return
+        if (percent == null) {
+            updateProgressBar.visibility = View.VISIBLE
+            updateProgressBar.isIndeterminate = true
+            updatePanel.text = "版本更新：正在下载 $tagName ..."
+        } else {
+            updateProgressBar.visibility = View.VISIBLE
+            updateProgressBar.isIndeterminate = false
+            updateProgressBar.progress = percent
+            updatePanel.text = "版本更新：正在下载 $tagName，$percent%"
+        }
+    }
+
+    private fun resetUpdateProgress() {
+        if (!::updateProgressBar.isInitialized) return
+        updateProgressBar.isIndeterminate = false
+        updateProgressBar.progress = 0
+        updateProgressBar.visibility = View.GONE
+    }
+
     private fun installDownloadedApk(fileName: String) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+            resetUpdateProgress()
             updatePanel.text = "版本更新：请允许本应用安装未知来源应用，授权后重新选择版本"
             appendLog("安装暂停：需要允许本应用安装未知来源应用")
             startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))

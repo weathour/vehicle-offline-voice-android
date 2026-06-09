@@ -10,15 +10,30 @@ class GitHubReleaseUpdateClient(private val context: Context) {
     fun fetchReleases(): List<GitHubReleaseVersion> = parseReleaseAtom(httpGetText(RELEASES_ATOM_URL))
         .filter { release -> !release.draft && release.apkAssetUrl() != null }
 
-    fun downloadApk(downloadUrl: String): File {
+    fun downloadApk(
+        downloadUrl: String,
+        progress: (DownloadProgress) -> Unit = {}
+    ): File {
         val updatesDir = File(context.cacheDir, UpdateApkProvider.UPDATE_CACHE_DIR).apply { mkdirs() }
         val outFile = File(updatesDir, UpdateApkProvider.UPDATE_APK_FILE_NAME)
         val connection = openConnection(downloadUrl)
         try {
             val code = connection.responseCode
             if (code !in 200..299) throw IOException("GitHub APK download HTTP $code")
+            val totalBytes = connection.contentLengthLong.takeIf { it > 0L }
+            var downloadedBytes = 0L
+            progress(DownloadProgress(downloadedBytes = 0L, totalBytes = totalBytes))
             connection.inputStream.use { input ->
-                outFile.outputStream().use { output -> input.copyTo(output) }
+                outFile.outputStream().use { output ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        output.write(buffer, 0, read)
+                        downloadedBytes += read
+                        progress(DownloadProgress(downloadedBytes = downloadedBytes, totalBytes = totalBytes))
+                    }
+                }
             }
         } finally {
             connection.disconnect()
@@ -85,6 +100,15 @@ data class GitHubReleaseAsset(
     val name: String,
     val downloadUrl: String
 )
+
+data class DownloadProgress(
+    val downloadedBytes: Long,
+    val totalBytes: Long?
+) {
+    val percent: Int? = totalBytes?.takeIf { it > 0L }?.let { total ->
+        ((downloadedBytes * 100L) / total).coerceIn(0L, 100L).toInt()
+    }
+}
 
 fun parseReleaseAtom(atom: String): List<GitHubReleaseVersion> = Regex("<entry>(.*?)</entry>", RegexOption.DOT_MATCHES_ALL)
     .findAll(atom)

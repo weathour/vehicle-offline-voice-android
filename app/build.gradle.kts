@@ -11,8 +11,8 @@ android {
         applicationId = "com.company.vehiclevoice"
         minSdk = 26
         targetSdk = 33
-        versionCode = 3
-        versionName = "0.3.2"
+        versionCode = 4
+        versionName = "0.3.3"
 
         testInstrumentationRunner = "android.app.Instrumentation"
     }

@@ -40,4 +40,11 @@ class GitHubReleaseUpdateClientTest {
 
         assertNull(release.apkAssetUrl())
     }
+    @Test
+    fun downloadProgress_calculatesPercentWhenTotalIsKnown() {
+        assertEquals(42, DownloadProgress(downloadedBytes = 42L, totalBytes = 100L).percent)
+        assertEquals(100, DownloadProgress(downloadedBytes = 120L, totalBytes = 100L).percent)
+        assertNull(DownloadProgress(downloadedBytes = 42L, totalBytes = null).percent)
+    }
+
 }
