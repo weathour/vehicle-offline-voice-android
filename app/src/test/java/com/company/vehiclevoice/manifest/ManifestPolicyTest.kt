@@ -10,6 +10,8 @@ class ManifestPolicyTest {
         val manifest = File("src/main/AndroidManifest.xml").readText()
         assertTrue(manifest.contains("android.permission.INTERNET"))
         assertTrue(manifest.contains("android.permission.RECORD_AUDIO"))
+        assertTrue(manifest.contains("android.permission.REQUEST_INSTALL_PACKAGES"))
         assertTrue(manifest.contains("android:foregroundServiceType=\"microphone\""))
+        assertTrue(manifest.contains(".update.UpdateApkProvider"))
     }
 }

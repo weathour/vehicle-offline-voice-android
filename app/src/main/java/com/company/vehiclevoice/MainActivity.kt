@@ -2,12 +2,15 @@ package com.company.vehiclevoice
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Typeface
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.text.InputType
 import android.view.View
 import android.view.ViewGroup
@@ -23,6 +26,9 @@ import com.company.vehiclevoice.data.readonly.VehicleDataSourceRuntimeConfig
 import com.company.vehiclevoice.core.VoiceRuntimeMode
 import com.company.vehiclevoice.data.readonly.SocketRedisBinaryDataSource
 import com.company.vehiclevoice.data.readonly.SocketRedisConfig
+import com.company.vehiclevoice.update.GitHubReleaseUpdateClient
+import com.company.vehiclevoice.update.GitHubReleaseVersion
+import com.company.vehiclevoice.update.UpdateApkProvider
 import kotlin.concurrent.thread
 
 class MainActivity : Activity() {
@@ -44,6 +50,7 @@ class MainActivity : Activity() {
     private lateinit var connectionPanel: TextView
     private lateinit var developerPanel: LinearLayout
     private lateinit var developerToggleButton: Button
+    private lateinit var updatePanel: TextView
     private var pendingStartAfterPermission = false
     private var pendingModeAfterPermission: VoiceRuntimeMode = VoiceRuntimeMode.PreviewMock
     private val serviceLogListener: (String) -> Unit = { line ->
@@ -266,8 +273,15 @@ class MainActivity : Activity() {
                 resetDebugPanel()
                 UiLogBus.clear()
                 connectionPanel.text = "连接诊断：未测试"
+                updatePanel.text = "版本更新：未检查"
             }
         })
+        developerPanel.addView(Button(this).apply {
+            text = "检查 GitHub 版本列表"
+            setOnClickListener { checkGitHubVersionList() }
+        })
+        updatePanel = debugLine("版本更新", "未检查")
+        developerPanel.addView(updatePanel)
         container.addView(developerPanel)
         return container
     }
@@ -431,6 +445,86 @@ class MainActivity : Activity() {
                     appendLog(message)
                 }
             }
+        }
+    }
+
+    private fun checkGitHubVersionList() {
+        updatePanel.text = "版本更新：正在读取 GitHub Releases ..."
+        appendLog("开始检查 GitHub 版本列表")
+        thread(name = "vehicle-github-release-list") {
+            val result = runCatching { GitHubReleaseUpdateClient(this).fetchReleases() }
+            runOnUiThread {
+                result.onSuccess { releases ->
+                    if (releases.isEmpty()) {
+                        updatePanel.text = "版本更新：没有找到带 APK 的 GitHub release"
+                        appendLog("GitHub 版本列表为空或没有 APK 资源")
+                    } else {
+                        updatePanel.text = "版本更新：找到 ${releases.size} 个可安装版本"
+                        showReleaseSelector(releases)
+                    }
+                }.onFailure { throwable ->
+                    val message = throwable.message ?: throwable::class.java.simpleName
+                    updatePanel.text = "版本更新：检查失败 $message"
+                    appendLog("GitHub 版本检查失败：$message")
+                }
+            }
+        }
+    }
+
+    private fun showReleaseSelector(releases: List<GitHubReleaseVersion>) {
+        val labels = releases.map { release -> release.title() }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("选择要安装的版本")
+            .setItems(labels) { _, which ->
+                downloadSelectedRelease(releases[which])
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun downloadSelectedRelease(release: GitHubReleaseVersion) {
+        val apkUrl = release.apkAssetUrl()
+        if (apkUrl == null) {
+            updatePanel.text = "版本更新：${release.tagName} 没有 APK 资源"
+            return
+        }
+        updatePanel.text = "版本更新：正在下载 ${release.tagName} ..."
+        appendLog("开始下载版本：${release.tagName}")
+        thread(name = "vehicle-github-apk-download") {
+            val result = runCatching {
+                GitHubReleaseUpdateClient(this).downloadApk(apkUrl)
+            }
+            runOnUiThread {
+                result.onSuccess { apkFile ->
+                    updatePanel.text = "版本更新：${release.tagName} 下载完成，准备安装"
+                    installDownloadedApk(apkFile.name)
+                }.onFailure { throwable ->
+                    val message = throwable.message ?: throwable::class.java.simpleName
+                    updatePanel.text = "版本更新：下载失败 $message"
+                    appendLog("版本 ${release.tagName} 下载失败：$message")
+                }
+            }
+        }
+    }
+
+    private fun installDownloadedApk(fileName: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+            updatePanel.text = "版本更新：请允许本应用安装未知来源应用，授权后重新选择版本"
+            appendLog("安装暂停：需要允许本应用安装未知来源应用")
+            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+            return
+        }
+        val uri = UpdateApkProvider.contentUri(this, fileName)
+        val intent = Intent(Intent.ACTION_VIEW)
+            .setDataAndType(uri, GitHubReleaseUpdateClient.APK_MIME)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching {
+            startActivity(intent)
+            updatePanel.text = "版本更新：已打开系统安装器"
+            appendLog("已打开系统安装器：$fileName")
+        }.onFailure { throwable ->
+            updatePanel.text = "版本更新：无法打开安装器 ${throwable.message ?: throwable::class.java.simpleName}"
         }
     }
 

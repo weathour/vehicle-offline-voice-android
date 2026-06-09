@@ -27,7 +27,8 @@ for required in \
   'android.permission.INTERNET' \
   'android.permission.FOREGROUND_SERVICE' \
   'android.permission.FOREGROUND_SERVICE_MICROPHONE' \
-  'android.permission.POST_NOTIFICATIONS'; do
+  'android.permission.POST_NOTIFICATIONS' \
+  'android.permission.REQUEST_INSTALL_PACKAGES'; do
   if ! grep -q "$required" <<<"$PERMISSIONS"; then
     echo "ERROR: APK is missing required permission: $required" >&2
     exit 1
@@ -43,4 +44,4 @@ if ! grep -q 'android:foregroundServiceType="microphone"' "$MERGED_MANIFEST"; th
   exit 1
 fi
 
-echo "APK permission policy OK: INTERNET intentionally present for Phase 1 remote Redis; required local voice permissions and microphone FGS type declared."
+echo "APK permission policy OK: INTERNET intentionally present for remote Redis and GitHub update checks; required local voice permissions, update install request permission, and microphone FGS type declared."
