@@ -6,28 +6,25 @@ import org.junit.Test
 
 class GitHubReleaseUpdateClientTest {
     @Test
-    fun parseReleaseList_extractsReleaseApkAssets() {
-        val releases = parseReleaseList(
+    fun parseReleaseAtom_extractsReleaseTagsAndDerivedApkUrls() {
+        val releases = parseReleaseAtom(
             """
-            [
-              {
-                "tag_name": "v0.3.1-version-selector",
-                "name": "Version selector",
-                "html_url": "https://github.com/weathour/vehicle-offline-voice-android/releases/tag/v0.3.1-version-selector",
-                "draft": false,
-                "prerelease": false,
-                "assets": [
-                  {"name": "notes.txt", "browser_download_url": "https://example.com/notes.txt"},
-                  {"name": "vehicle-offline-voice-v0.3.1-debug.apk", "browser_download_url": "https://example.com/app.apk"}
-                ]
-              }
-            ]
+            <feed>
+              <entry>
+                <id>tag:github.com,2008:Repository/1262716404/v0.3.1-version-selector</id>
+                <link rel="alternate" type="text/html" href="https://github.com/weathour/vehicle-offline-voice-android/releases/tag/v0.3.1-version-selector"/>
+                <title>v0.3.1 Version Selector (debug)</title>
+              </entry>
+            </feed>
             """.trimIndent()
         )
 
         assertEquals(1, releases.size)
         assertEquals("v0.3.1-version-selector", releases.first().tagName)
-        assertEquals("https://example.com/app.apk", releases.first().apkAssetUrl())
+        assertEquals(
+            "https://github.com/weathour/vehicle-offline-voice-android/releases/download/v0.3.1-version-selector/vehicle-offline-voice-android-v0.3.1-version-selector-debug.apk",
+            releases.first().apkAssetUrl()
+        )
     }
 
     @Test

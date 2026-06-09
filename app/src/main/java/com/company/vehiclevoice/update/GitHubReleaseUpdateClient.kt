@@ -7,7 +7,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class GitHubReleaseUpdateClient(private val context: Context) {
-    fun fetchReleases(): List<GitHubReleaseVersion> = parseReleaseList(httpGetText(RELEASES_URL))
+    fun fetchReleases(): List<GitHubReleaseVersion> = parseReleaseAtom(httpGetText(RELEASES_ATOM_URL))
         .filter { release -> !release.draft && release.apkAssetUrl() != null }
 
     fun downloadApk(downloadUrl: String): File {
@@ -55,7 +55,7 @@ class GitHubReleaseUpdateClient(private val context: Context) {
 
     companion object {
         const val REPOSITORY = "weathour/vehicle-offline-voice-android"
-        const val RELEASES_URL = "https://api.github.com/repos/$REPOSITORY/releases"
+        const val RELEASES_ATOM_URL = "https://github.com/$REPOSITORY/releases.atom"
         const val APK_MIME = "application/vnd.android.package-archive"
     }
 }
@@ -86,88 +86,35 @@ data class GitHubReleaseAsset(
     val downloadUrl: String
 )
 
-fun parseReleaseList(json: String): List<GitHubReleaseVersion> = topLevelObjects(json).map { releaseJson ->
-    val assets = jsonArrayForField(releaseJson, "assets")
-        ?.let(::topLevelObjects)
-        ?.mapNotNull { assetJson ->
-            val name = jsonStringField(assetJson, "name")
-            val downloadUrl = jsonStringField(assetJson, "browser_download_url")
-            if (name != null && downloadUrl != null) GitHubReleaseAsset(name, downloadUrl) else null
-        }
-        .orEmpty()
-    GitHubReleaseVersion(
-        tagName = jsonStringField(releaseJson, "tag_name").orEmpty(),
-        name = jsonStringField(releaseJson, "name").orEmpty(),
-        htmlUrl = jsonStringField(releaseJson, "html_url").orEmpty(),
-        draft = jsonBooleanField(releaseJson, "draft") ?: false,
-        prerelease = jsonBooleanField(releaseJson, "prerelease") ?: false,
-        assets = assets
-    )
-}.filter { release -> release.tagName.isNotBlank() }
-
-private fun jsonStringField(json: String, field: String): String? {
-    val match = Regex("\\\"${Regex.escape(field)}\\\"\\s*:\\s*\\\"((?:\\\\.|[^\\\"])*)\\\"").find(json) ?: return null
-    return match.groupValues[1]
-        .replace("\\/", "/")
-        .replace("\\\"", "\"")
-        .replace("\\n", "\n")
-}
-
-private fun jsonBooleanField(json: String, field: String): Boolean? {
-    val match = Regex("\\\"${Regex.escape(field)}\\\"\\s*:\\s*(true|false)").find(json) ?: return null
-    return match.groupValues[1].toBooleanStrictOrNull()
-}
-
-private fun jsonArrayForField(json: String, field: String): String? {
-    val fieldIndex = json.indexOf("\"$field\"")
-    if (fieldIndex < 0) return null
-    val start = json.indexOf('[', fieldIndex)
-    if (start < 0) return null
-    val end = matchingBracket(json, start, '[', ']')
-    if (end <= start) return null
-    return json.substring(start, end + 1)
-}
-
-private fun topLevelObjects(json: String): List<String> {
-    val result = mutableListOf<String>()
-    var index = 0
-    while (index < json.length) {
-        val start = json.indexOf('{', index)
-        if (start < 0) break
-        val end = matchingBracket(json, start, '{', '}')
-        if (end < 0) break
-        result += json.substring(start, end + 1)
-        index = end + 1
+fun parseReleaseAtom(atom: String): List<GitHubReleaseVersion> = Regex("<entry>(.*?)</entry>", RegexOption.DOT_MATCHES_ALL)
+    .findAll(atom)
+    .mapNotNull { match ->
+        val entry = match.groupValues[1]
+        val tagName = Regex("/releases/tag/([^\"<]+)").find(entry)?.groupValues?.get(1)
+            ?: Regex("Repository/\\d+/([^<]+)").find(entry)?.groupValues?.get(1)
+            ?: return@mapNotNull null
+        val title = xmlUnescape(Regex("<title>(.*?)</title>", RegexOption.DOT_MATCHES_ALL).find(entry)?.groupValues?.get(1)).ifBlank { tagName }
+        GitHubReleaseVersion(
+            tagName = tagName,
+            name = title,
+            htmlUrl = "https://github.com/${GitHubReleaseUpdateClient.REPOSITORY}/releases/tag/$tagName",
+            draft = false,
+            prerelease = false,
+            assets = listOf(
+                GitHubReleaseAsset(
+                    name = apkFileName(tagName),
+                    downloadUrl = "https://github.com/${GitHubReleaseUpdateClient.REPOSITORY}/releases/download/$tagName/${apkFileName(tagName)}"
+                )
+            )
+        )
     }
-    return result
-}
+    .toList()
 
-private fun matchingBracket(json: String, start: Int, open: Char, close: Char): Int {
-    var depth = 0
-    var inString = false
-    var escaped = false
-    for (index in start until json.length) {
-        val char = json[index]
-        if (escaped) {
-            escaped = false
-            continue
-        }
-        if (char == '\\') {
-            escaped = inString
-            continue
-        }
-        if (char == '"') {
-            inString = !inString
-            continue
-        }
-        if (inString) continue
-        when (char) {
-            open -> depth += 1
-            close -> {
-                depth -= 1
-                if (depth == 0) return index
-            }
-        }
-    }
-    return -1
-}
+fun apkFileName(tagName: String): String = "vehicle-offline-voice-android-$tagName-debug.apk"
+
+private fun xmlUnescape(value: String?): String = value.orEmpty()
+    .replace("&amp;", "&")
+    .replace("&lt;", "<")
+    .replace("&gt;", ">")
+    .replace("&quot;", "\"")
+    .replace("&#39;", "'")
