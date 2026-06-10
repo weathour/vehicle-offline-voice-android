@@ -31,7 +31,8 @@ object VehicleRedisKeys {
     const val DCU_INFO_1 = "DCU_INFO_1"
     const val DCU_INFO_2 = "DCU_INFO_2"
     const val BATTERY = "DCU_Battery_St"
-    const val RANGE = "DCU_INFO"
+    const val RANGE = "DCU_INFO_St"
+    const val RANGE_LEGACY = "DCU_INFO"
     const val L2_STATE = "DCU_L2_St"
     const val BODY_STATE = "BC_AutoD_Veh_St"
     const val TPMS = "TPMS_INFO"
@@ -39,11 +40,14 @@ object VehicleRedisKeys {
     const val AC_STATE = "ACM_INF4"
     const val LOCATION = "Sensor_Location"
     const val OBSTACLES = "Sensor_Mmobstacles"
-    const val TRAFFIC_LIGHTS = "Sensor_Trafficlightlist"
+    const val TRAFFIC_LIGHTS = "Sensor_TrafficLightlist"
+    const val TRAFFIC_LIGHTS_LEGACY = "Sensor_Trafficlightlist"
+    const val LANES = "Sensor_Lanelist"
     const val MAIN_OBSTACLE = "PFC_Main_Obstacle_INF"
+    const val PLANNED_TRAJECTORY = "planned_trajectory"
 
-    /** Simulator default for ingested `sam.proto`; confirm real Redis key spelling in Phase 2. */
-    const val SAM = "Sam"
+    const val SAM = "Sensor_SAM"
+    const val SAM_LEGACY = "Sam"
 
     val defaultReadOnlyKeys: List<String> = listOf(
         SPEED,
@@ -59,7 +63,15 @@ object VehicleRedisKeys {
         LOCATION,
         OBSTACLES,
         TRAFFIC_LIGHTS,
+        LANES,
         MAIN_OBSTACLE,
+        PLANNED_TRAJECTORY,
         SAM
+    )
+
+    val aliases: Map<String, List<String>> = mapOf(
+        RANGE to listOf(RANGE_LEGACY),
+        TRAFFIC_LIGHTS to listOf(TRAFFIC_LIGHTS_LEGACY),
+        SAM to listOf(SAM_LEGACY)
     )
 }

@@ -5,9 +5,12 @@ data class VehicleReadOnlySnapshot(
     val diagnostics: VehicleDataSourceDiagnostics,
     val keyStatuses: Map<String, KeyReadStatus>,
     val speedKmh: Float? = null,
+    val speedSource: String? = null,
     val gear: String? = null,
     val parking: String? = null,
     val batterySocPercent: Float? = null,
+    val batteryVoltageVolts: Float? = null,
+    val batteryCurrentAmps: Float? = null,
     val remainingRangeKm: Float? = null,
     val acPower: String? = null,
     val acMode: String? = null,
@@ -23,16 +26,23 @@ data class VehicleReadOnlySnapshot(
     val dcuInfo2: VehicleDcuInfo2? = null,
     val l2Status: VehicleL2Status? = null,
     val location: VehicleLocation? = null,
+    val obstacleCount: Int? = null,
     val nearestObstacle: VehicleObstacle? = null,
+    val obstacles: List<VehicleObstacle> = emptyList(),
     val perceptionFaults: VehiclePerceptionFaults? = null,
     val trafficLight: VehicleTrafficLight? = null,
+    val laneStatus: VehicleLaneStatus? = null,
+    val plannedTrajectory: VehiclePlannedTrajectory? = null,
     val cooperativeState: VehicleCooperativeState? = null
 ) {
     val hasAnyDecodedValue: Boolean get() = listOfNotNull(
         speedKmh,
+        speedSource,
         gear,
         parking,
         batterySocPercent,
+        batteryVoltageVolts,
+        batteryCurrentAmps,
         remainingRangeKm,
         acPower,
         acMode,
@@ -48,9 +58,13 @@ data class VehicleReadOnlySnapshot(
         dcuInfo2,
         l2Status,
         location,
+        obstacleCount,
         nearestObstacle,
+        obstacles.takeIf { it.isNotEmpty() },
         perceptionFaults,
         trafficLight,
+        laneStatus,
+        plannedTrajectory,
         cooperativeState
     ).isNotEmpty()
 }
@@ -59,8 +73,28 @@ data class VehicleLocation(
     val timestamp: Double?,
     val lon: Double?,
     val lat: Double?,
+    val height: Double?,
+    val pitch: Double?,
+    val roll: Double?,
     val heading: Double?,
-    val linearVelocity: Double?
+    val linearVelocity: Double?,
+    val velocityX: Double?,
+    val velocityY: Double?,
+    val velocityZ: Double?,
+    val linearAcceleration: Double?,
+    val accelerationX: Double?,
+    val accelerationY: Double?,
+    val accelerationZ: Double?,
+    val angularVelocity: Double?,
+    val angularVelocityX: Double?,
+    val angularVelocityY: Double?,
+    val angularVelocityZ: Double?,
+    val originLon: Double?,
+    val originLat: Double?,
+    val utmPositionX: Double?,
+    val utmPositionY: Double?,
+    val utmPositionZ: Double?,
+    val rtkFlag: Int?
 )
 
 data class VehicleObstacle(
@@ -68,8 +102,15 @@ data class VehicleObstacle(
     val type: String?,
     val vehicleX: Double?,
     val vehicleY: Double?,
+    val vehicleZ: Double?,
+    val distanceXY: Double?,
     val velocity: Double?,
-    val confidence: Double?
+    val confidence: Double?,
+    val length: Double? = null,
+    val width: Double? = null,
+    val height: Double? = null,
+    val lon: Double? = null,
+    val lat: Double? = null
 )
 
 data class VehiclePerceptionFaults(
@@ -85,9 +126,33 @@ data class VehiclePerceptionFaults(
 }
 
 data class VehicleTrafficLight(
+    val timestamp: Double?,
     val color: String?,
     val confidence: Double?,
-    val count: Int?
+    val count: Int?,
+    val intersectionId: Int? = null,
+    val phaseId: Int? = null,
+    val remainingTimeSeconds: Double? = null,
+    val lon: Double? = null,
+    val lat: Double? = null
+) {
+    val hasBusinessData: Boolean get() = color != null || count != null || phaseId != null || remainingTimeSeconds != null
+}
+
+data class VehicleLaneStatus(
+    val timestamp: Double?,
+    val laneCount: Int?,
+    val lineCount: Int,
+    val bestConfidence: Double?
+) {
+    val hasBusinessData: Boolean get() = laneCount != null || lineCount > 0
+}
+
+data class VehiclePlannedTrajectory(
+    val pointCount: Int,
+    val firstPoint: Pair<Double, Double>?,
+    val lastPoint: Pair<Double, Double>?,
+    val approximateLengthMeters: Double?
 )
 
 data class VehicleTireStatus(
@@ -156,6 +221,10 @@ data class VehicleCooperativeState(
     val vehicleId: Int?,
     val vehicleNumber: String?,
     val autoLevel: String?,
+    val drivingModeFeedback: Int?,
+    val gearLocationFeedback: Int?,
+    val steeringValueFeedback: Double?,
+    val accelerationCommand: Double?,
     val speedMps: Double?,
     val collaborativeVehicleCount: Int?,
     val drivingIntention: String?,

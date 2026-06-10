@@ -28,7 +28,9 @@ object SimulatedVehicleRedisFixtures {
         VehicleRedisKeys.LOCATION to location(),
         VehicleRedisKeys.OBSTACLES to obstacles(),
         VehicleRedisKeys.TRAFFIC_LIGHTS to trafficLights(color = 3),
+        VehicleRedisKeys.LANES to laneList(),
         VehicleRedisKeys.MAIN_OBSTACLE to mainObstacle(),
+        VehicleRedisKeys.PLANNED_TRAJECTORY to plannedTrajectory(),
         VehicleRedisKeys.SAM to sam(sceneId = 1, eventType = 2, collaborativeVehicleCount = 2)
     )
 
@@ -64,12 +66,16 @@ object SimulatedVehicleRedisFixtures {
     }
 
     fun battery(socPercent: Float): ByteArray = ProtoWire.build {
-        float(1, 612.0f)
-        float(2, 8.5f)
-        float(3, socPercent)
+        double(1, 1_717_820_800.0)
+        float(2, 612.0f)
+        float(3, 8.5f)
+        float(4, socPercent)
     }
 
-    fun range(km: Float): ByteArray = ProtoWire.build { float(1, km) }
+    fun range(km: Float): ByteArray = ProtoWire.build {
+        double(1, 1_717_820_800.0)
+        float(2, km)
+    }
 
     fun l2State(
         accStatus: Int = 4,
@@ -132,20 +138,46 @@ object SimulatedVehicleRedisFixtures {
         double(1, 1_717_820_800.0)
         double(2, 106.5516)
         double(3, 29.5630)
+        double(4, 302.8)
+        double(5, -0.02)
+        double(6, 0.01)
         double(7, 92.0)
-        double(8, 3.47)
+        double(8, 12.5 / 3.6)
+        double(9, 3.4)
+        double(10, 0.2)
+        double(11, 0.0)
+        double(12, 0.3)
+        double(16, 0.002)
+        double(22, -5714.3)
+        double(23, 579.0)
+        double(24, 302.8)
+        int32(25, 1)
     }
 
     fun obstacles(type: Int = 2, x: Double = 18.2, y: Double = -0.5, confidence: Double = 0.88): ByteArray = ProtoWire.build {
         double(1, 1_717_820_800.0)
-        int32(2, 1)
+        int32(2, 2)
         message(3, ProtoWire.build {
             int32(1, 101)
             double(2, x)
             double(3, y)
-            double(8, 2.1)
+            double(4, 0.4)
+            double(9, 2.1)
+            double(12, 4.6)
+            double(13, 1.8)
+            double(14, 1.6)
             int32(15, type)
             double(16, confidence)
+            double(23, 106.5517)
+            double(24, 29.5631)
+        })
+        message(3, ProtoWire.build {
+            int32(1, 102)
+            double(2, 28.0)
+            double(3, 1.0)
+            double(9, 0.5)
+            int32(15, 2)
+            double(16, 0.72)
         })
     }
 
@@ -161,6 +193,27 @@ object SimulatedVehicleRedisFixtures {
             int32(6, 18)
         })
     }
+
+    fun trafficLightsTimestampOnly(): ByteArray = ProtoWire.build {
+        double(1, 1_717_820_800.0)
+    }
+
+    fun laneList(count: Int = 2, confidence: Double = 0.82): ByteArray = ProtoWire.build {
+        double(1, 1_717_820_800.0)
+        int32(2, count)
+        message(3, ProtoWire.build {
+            int32(1, 1)
+            int32(2, 2)
+            double(6, confidence)
+        })
+    }
+
+    fun laneListTimestampOnly(): ByteArray = ProtoWire.build {
+        double(1, 1_717_820_800.0)
+    }
+
+    fun plannedTrajectory(): ByteArray =
+        "[[-2709.7, 467.3], [-2708.7, 467.3], [-2690.2, 464.0]]".toByteArray(Charsets.UTF_8)
 
     fun mainObstacle(
         type: Int = 2,

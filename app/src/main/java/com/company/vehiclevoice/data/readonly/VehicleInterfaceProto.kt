@@ -1,7 +1,13 @@
 package com.company.vehiclevoice.data.readonly
 
+import java.nio.charset.StandardCharsets
+import kotlin.math.hypot
+
 internal object VehicleInterfaceProto {
-    fun decodeSpeed(payload: ByteArray): Float? = ProtoWire.decode(payload).lastFloat(1)
+    fun decodeSpeed(payload: ByteArray): Float? {
+        val fields = ProtoWire.decode(payload)
+        return fields.lastFloat(2) ?: fields.lastFloat(1)
+    }
 
     fun decodeDcuInfo1(payload: ByteArray): DcuInfo1 {
         val fields = ProtoWire.decode(payload)
@@ -26,10 +32,16 @@ internal object VehicleInterfaceProto {
     }
 
     fun decodeBattery(payload: ByteArray): Battery = ProtoWire.decode(payload).let { fields ->
-        Battery(socPercent = fields.lastFloat(3))
+        Battery(
+            voltage = fields.lastFloat(2) ?: fields.lastFloat(1),
+            current = fields.lastFloat(3),
+            socPercent = fields.lastFloat(4) ?: fields.lastFloat(3)
+        )
     }
 
-    fun decodeRange(payload: ByteArray): Float? = ProtoWire.decode(payload).lastFloat(1)
+    fun decodeRange(payload: ByteArray): Float? = ProtoWire.decode(payload).let { fields ->
+        fields.lastFloat(2) ?: fields.lastFloat(1)
+    }
 
     fun decodeL2Status(payload: ByteArray): VehicleL2Status = ProtoWire.decode(payload).let { fields ->
         VehicleL2Status(
@@ -83,8 +95,28 @@ internal object VehicleInterfaceProto {
             timestamp = fields.lastDouble(1),
             lon = fields.lastDouble(2),
             lat = fields.lastDouble(3),
+            height = fields.lastDouble(4),
+            pitch = fields.lastDouble(5),
+            roll = fields.lastDouble(6),
             heading = fields.lastDouble(7),
-            linearVelocity = fields.lastDouble(8)
+            linearVelocity = fields.lastDouble(8),
+            velocityX = fields.lastDouble(9),
+            velocityY = fields.lastDouble(10),
+            velocityZ = fields.lastDouble(11),
+            linearAcceleration = fields.lastDouble(12),
+            accelerationX = fields.lastDouble(13),
+            accelerationY = fields.lastDouble(14),
+            accelerationZ = fields.lastDouble(15),
+            angularVelocity = fields.lastDouble(16),
+            angularVelocityX = fields.lastDouble(17),
+            angularVelocityY = fields.lastDouble(18),
+            angularVelocityZ = fields.lastDouble(19),
+            originLon = fields.lastDouble(20),
+            originLat = fields.lastDouble(21),
+            utmPositionX = fields.lastDouble(22),
+            utmPositionY = fields.lastDouble(23),
+            utmPositionZ = fields.lastDouble(24),
+            rtkFlag = fields.lastVarint(25)
         )
     }
 
@@ -93,21 +125,27 @@ internal object VehicleInterfaceProto {
         val count = fields.lastVarint(2)
         val first = fields.messages(3).firstOrNull()?.let { ProtoWire.decode(it) }
         return VehicleTrafficLight(
+            timestamp = fields.lastDouble(1),
             color = first?.lastVarint(1)?.let(::trafficLightColorName),
             confidence = first?.lastDouble(2),
-            count = count
+            count = count,
+            intersectionId = first?.lastVarint(7),
+            phaseId = first?.lastVarint(8),
+            remainingTimeSeconds = first?.lastDouble(9),
+            lon = first?.lastDouble(10),
+            lat = first?.lastDouble(11)
         )
     }
 
-    fun decodeObstacles(payload: ByteArray): VehicleObstacle? {
-        val first = ProtoWire.decode(payload).messages(3).firstOrNull()?.let { ProtoWire.decode(it) } ?: return null
-        return VehicleObstacle(
-            id = first.lastVarint(1),
-            vehicleX = first.lastDouble(2),
-            vehicleY = first.lastDouble(3),
-            velocity = first.lastDouble(8),
-            type = first.lastVarint(15)?.let(::obstacleTypeName),
-            confidence = first.lastDouble(16)
+    fun decodeObstacles(payload: ByteArray): ObstacleDecode {
+        val fields = ProtoWire.decode(payload)
+        val obstacles = fields.messages(3).map { decodeObstacle(ProtoWire.decode(it)) }
+        val nearest = obstacles.minByOrNull { it.distanceXY ?: Double.MAX_VALUE }
+        return ObstacleDecode(
+            timestamp = fields.lastDouble(1),
+            count = fields.lastVarint(2) ?: obstacles.size.takeIf { it > 0 },
+            obstacles = obstacles,
+            nearest = nearest
         )
     }
 
@@ -118,6 +156,10 @@ internal object VehicleInterfaceProto {
                 type = fields.lastVarint(1)?.let(::obstacleTypeName),
                 vehicleX = fields.lastFloat(2)?.toDouble(),
                 vehicleY = fields.lastFloat(3)?.toDouble(),
+                vehicleZ = null,
+                distanceXY = fields.lastFloat(2)?.toDouble()?.let { x ->
+                    fields.lastFloat(3)?.toDouble()?.let { y -> hypot(x, y) }
+                },
                 velocity = fields.lastFloat(4)?.toDouble(),
                 confidence = null
             ),
@@ -130,6 +172,36 @@ internal object VehicleInterfaceProto {
         )
     }
 
+    fun decodeLaneStatus(payload: ByteArray): VehicleLaneStatus = ProtoWire.decode(payload).let { fields ->
+        val lines = fields.messages(3).map { ProtoWire.decode(it) }
+        VehicleLaneStatus(
+            timestamp = fields.lastDouble(1),
+            laneCount = fields.lastVarint(2),
+            lineCount = lines.size,
+            bestConfidence = lines.mapNotNull { it.lastDouble(6) }.maxOrNull()
+        )
+    }
+
+    fun decodePlannedTrajectory(payload: ByteArray): VehiclePlannedTrajectory? {
+        val text = runCatching { String(payload, StandardCharsets.UTF_8) }.getOrNull() ?: return null
+        val points = Regex("\\[\\s*(-?\\d+(?:\\.\\d+)?)\\s*,\\s*(-?\\d+(?:\\.\\d+)?)\\s*\\]")
+            .findAll(text)
+            .mapNotNull { match ->
+                val x = match.groupValues[1].toDoubleOrNull()
+                val y = match.groupValues[2].toDoubleOrNull()
+                if (x == null || y == null) null else x to y
+            }
+            .toList()
+        if (points.isEmpty()) return null
+        val length = points.zipWithNext().sumOf { (a, b) -> hypot(b.first - a.first, b.second - a.second) }
+        return VehiclePlannedTrajectory(
+            pointCount = points.size,
+            firstPoint = points.firstOrNull(),
+            lastPoint = points.lastOrNull(),
+            approximateLengthMeters = length
+        )
+    }
+
     fun decodeSam(payload: ByteArray): VehicleCooperativeState = ProtoWire.decode(payload).let { fields ->
         VehicleCooperativeState(
             timestamp = fields.lastDouble(1),
@@ -138,6 +210,10 @@ internal object VehicleInterfaceProto {
             vehicleId = fields.lastVarint(3),
             vehicleNumber = fields.lastString(4),
             autoLevel = fields.lastString(5),
+            drivingModeFeedback = fields.lastVarint(6),
+            gearLocationFeedback = fields.lastVarint(7),
+            steeringValueFeedback = fields.lastDouble(8),
+            accelerationCommand = fields.lastDouble(9),
             speedMps = fields.lastDouble(10),
             collaborativeVehicleCount = fields.lastVarint(11),
             drivingIntention = fields.lastVarint(13)?.let(::cooperativeBehaviorName),
@@ -151,11 +227,37 @@ internal object VehicleInterfaceProto {
     }
 
     data class DcuInfo1(val gear: String?, val parking: String?)
-    data class Battery(val socPercent: Float?)
+    data class Battery(val voltage: Float?, val current: Float?, val socPercent: Float?)
     data class AcTemperature(val inCar: Float?, val outCar: Float?)
     data class AcState(val power: String?, val mode: String?, val fanGear: Int?, val setTemp: Float?)
     data class BodyState(val frontDoor: String?, val midDoor: String?, val horn: String?, val wiper: String?)
     data class PfcMainObstacleState(val obstacle: VehicleObstacle?, val faults: VehiclePerceptionFaults?)
+    data class ObstacleDecode(
+        val timestamp: Double?,
+        val count: Int?,
+        val obstacles: List<VehicleObstacle>,
+        val nearest: VehicleObstacle?
+    )
+
+    private fun decodeObstacle(fields: List<ProtoField>): VehicleObstacle {
+        val x = fields.lastDouble(2)
+        val y = fields.lastDouble(3)
+        return VehicleObstacle(
+            id = fields.lastVarint(1),
+            vehicleX = x,
+            vehicleY = y,
+            vehicleZ = fields.lastDouble(4),
+            distanceXY = if (x != null && y != null) hypot(x, y) else null,
+            velocity = fields.lastDouble(8) ?: fields.lastDouble(9),
+            type = fields.lastVarint(15)?.let(::obstacleTypeName),
+            confidence = fields.lastDouble(16),
+            length = fields.lastDouble(12),
+            width = fields.lastDouble(13),
+            height = fields.lastDouble(14),
+            lon = fields.lastDouble(23),
+            lat = fields.lastDouble(24)
+        )
+    }
 
     private fun named(value: Int, names: Map<Int, String>, prefix: String): String = names[value] ?: "$prefix($value)"
 
@@ -195,7 +297,7 @@ internal object VehicleInterfaceProto {
     private fun tirePressureAlarmName(value: Int): String = named(value, mapOf(0 to "超出极限压力", 1 to "过压", 2 to "没有压力报警", 3 to "压力过低", 4 to "低于低压极限", 5 to "无效值", 6 to "指示器错误", 7 to "保留"), "未知压力报警")
 
     private fun trafficLightColorName(value: Int): String = named(value, mapOf(1 to "红灯", 2 to "黄灯", 3 to "绿灯"), "颜色类型")
-    private fun obstacleTypeName(value: Int): String = named(value, mapOf(0 to "无效", 1 to "行人", 2 to "车辆"), "障碍物类型")
+    private fun obstacleTypeName(value: Int): String = named(value, mapOf(0 to "无效", 1 to "行人", 2 to "车辆", 3 to "车辆", 5 to "车辆", 6 to "行人", 10 to "未知目标"), "障碍物类型")
     private fun cameraFaultName(value: Int): String = named(value, mapOf(0 to "无故障", 1 to "摄像头连接故障"), "未知摄像头故障")
     private fun radarFaultName(value: Int): String = named(value, mapOf(0 to "无故障", 1 to "雷达连接故障", 2 to "雷达硬件故障", 3 to "雷达堵塞故障", 4 to "雷达标定故障", 5 to "雷达不工作"), "未知雷达故障")
     private fun vehicleConnectFaultName(value: Int): String = named(value, mapOf(0 to "无故障", 1 to "车辆连接故障"), "未知车辆连接故障")

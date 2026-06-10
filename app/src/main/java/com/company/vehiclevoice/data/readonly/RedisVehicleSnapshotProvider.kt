@@ -12,9 +12,12 @@ class RedisVehicleSnapshotProvider(
         val statuses = linkedMapOf<String, KeyReadStatus>()
         val startedAtMs = clockMs()
         var speed: Float? = null
+        var speedSource: String? = null
         var gear: String? = null
         var parking: String? = null
         var batterySoc: Float? = null
+        var batteryVoltage: Float? = null
+        var batteryCurrent: Float? = null
         var range: Float? = null
         var acPower: String? = null
         var acMode: String? = null
@@ -30,9 +33,13 @@ class RedisVehicleSnapshotProvider(
         var dcuInfo2: VehicleDcuInfo2? = null
         var l2Status: VehicleL2Status? = null
         var location: VehicleLocation? = null
+        var obstacleCount: Int? = null
+        var obstacles: List<VehicleObstacle> = emptyList()
         var nearestObstacle: VehicleObstacle? = null
         var perceptionFaults: VehiclePerceptionFaults? = null
         var trafficLight: VehicleTrafficLight? = null
+        var laneStatus: VehicleLaneStatus? = null
+        var plannedTrajectory: VehiclePlannedTrajectory? = null
         var cooperativeState: VehicleCooperativeState? = null
 
         for ((index, key) in keys.withIndex()) {
@@ -66,13 +73,22 @@ class RedisVehicleSnapshotProvider(
             }
             runCatching {
                 when (key) {
-                    VehicleRedisKeys.SPEED -> speed = VehicleInterfaceProto.decodeSpeed(value.payload)
+                    VehicleRedisKeys.SPEED -> {
+                        if (speed == null) {
+                            speed = VehicleInterfaceProto.decodeSpeed(value.payload)
+                            if (speed != null) speedSource = "BC_Veh_Spd"
+                        }
+                    }
                     VehicleRedisKeys.DCU_INFO_1 -> VehicleInterfaceProto.decodeDcuInfo1(value.payload).also {
                         gear = it.gear
                         parking = it.parking
                     }
                     VehicleRedisKeys.DCU_INFO_2 -> dcuInfo2 = VehicleInterfaceProto.decodeDcuInfo2(value.payload)
-                    VehicleRedisKeys.BATTERY -> batterySoc = VehicleInterfaceProto.decodeBattery(value.payload).socPercent
+                    VehicleRedisKeys.BATTERY -> VehicleInterfaceProto.decodeBattery(value.payload).also {
+                        batteryVoltage = it.voltage
+                        batteryCurrent = it.current
+                        batterySoc = it.socPercent
+                    }
                     VehicleRedisKeys.RANGE -> range = VehicleInterfaceProto.decodeRange(value.payload)
                     VehicleRedisKeys.L2_STATE -> l2Status = VehicleInterfaceProto.decodeL2Status(value.payload)
                     VehicleRedisKeys.AC_TEMPERATURE -> VehicleInterfaceProto.decodeAcTemperature(value.payload).also {
@@ -92,13 +108,25 @@ class RedisVehicleSnapshotProvider(
                         wiper = it.wiper
                     }
                     VehicleRedisKeys.TPMS -> tireStatus = VehicleInterfaceProto.decodeTpms(value.payload)
-                    VehicleRedisKeys.LOCATION -> location = VehicleInterfaceProto.decodeLocation(value.payload)
-                    VehicleRedisKeys.OBSTACLES -> nearestObstacle = VehicleInterfaceProto.decodeObstacles(value.payload) ?: nearestObstacle
+                    VehicleRedisKeys.LOCATION -> {
+                        location = VehicleInterfaceProto.decodeLocation(value.payload)
+                        location?.linearVelocity?.let {
+                            speed = (it * 3.6).toFloat()
+                            speedSource = "Sensor_Location.linear_velocity"
+                        }
+                    }
+                    VehicleRedisKeys.OBSTACLES -> VehicleInterfaceProto.decodeObstacles(value.payload).also {
+                        obstacleCount = it.count
+                        obstacles = it.obstacles
+                        nearestObstacle = it.nearest ?: nearestObstacle
+                    }
                     VehicleRedisKeys.TRAFFIC_LIGHTS -> trafficLight = VehicleInterfaceProto.decodeTrafficLights(value.payload)
+                    VehicleRedisKeys.LANES -> laneStatus = VehicleInterfaceProto.decodeLaneStatus(value.payload)
                     VehicleRedisKeys.MAIN_OBSTACLE -> VehicleInterfaceProto.decodeMainObstacle(value.payload).also {
                         if (nearestObstacle == null) nearestObstacle = it.obstacle
                         perceptionFaults = it.faults
                     }
+                    VehicleRedisKeys.PLANNED_TRAJECTORY -> plannedTrajectory = VehicleInterfaceProto.decodePlannedTrajectory(value.payload)
                     VehicleRedisKeys.SAM -> cooperativeState = VehicleInterfaceProto.decodeSam(value.payload)
                 }
             }.onSuccess {
@@ -119,9 +147,12 @@ class RedisVehicleSnapshotProvider(
             diagnostics = dataSource.diagnostics(),
             keyStatuses = statuses,
             speedKmh = speed,
+            speedSource = speedSource,
             gear = gear,
             parking = parking,
             batterySocPercent = batterySoc,
+            batteryVoltageVolts = batteryVoltage,
+            batteryCurrentAmps = batteryCurrent,
             remainingRangeKm = range,
             acPower = acPower,
             acMode = acMode,
@@ -137,9 +168,13 @@ class RedisVehicleSnapshotProvider(
             dcuInfo2 = dcuInfo2,
             l2Status = l2Status,
             location = location,
+            obstacleCount = obstacleCount,
             nearestObstacle = nearestObstacle,
+            obstacles = obstacles,
             perceptionFaults = perceptionFaults,
             trafficLight = trafficLight,
+            laneStatus = laneStatus,
+            plannedTrajectory = plannedTrajectory,
             cooperativeState = cooperativeState
         )
     }
@@ -150,11 +185,15 @@ class RedisVehicleSnapshotProvider(
     }
 
     private fun readWithDeadline(key: String, remainingMs: Long): VehicleBinaryValue? {
-        return if (dataSource is SocketRedisBinaryDataSource && remainingMs != Long.MAX_VALUE) {
-            dataSource.read(key, timeoutMsOverride = remainingMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
-        } else {
-            dataSource.read(key)
+        for (candidate in listOf(key) + VehicleRedisKeys.aliases[key].orEmpty()) {
+            val value = if (dataSource is SocketRedisBinaryDataSource && remainingMs != Long.MAX_VALUE) {
+                dataSource.read(candidate, timeoutMsOverride = remainingMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+            } else {
+                dataSource.read(candidate)
+            }
+            if (value != null) return value.copy(key = key)
         }
+        return null
     }
 
     companion object {
