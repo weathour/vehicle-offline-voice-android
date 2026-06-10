@@ -27,10 +27,48 @@ object RedisDebugRows {
                 listOfNotNull(v("vehicle.summary.basic"), v("vehicle.summary.warning"), v("vehicle.summary.cooperation"))
                     .joinToString("；")
             ),
-            row("当前车速", listOf(VehicleRedisKeys.SPEED), v("vehicle.speed_kmh")?.let { "$it km/h" }.orEmpty()),
+            row(
+                "Redis 数据健康 / Key 诊断",
+                VehicleRedisKeys.defaultReadOnlyKeys,
+                listOfNotNull(
+                    v("vehicle.snapshot.connected")?.let { "connected=$it" },
+                    v("vehicle.snapshot.decoded_keys")?.let { "decoded=$it" },
+                    v("vehicle.snapshot.missing_keys")?.let { "missing=$it" },
+                    v("vehicle.snapshot.decode_errors")?.let { "decodeError=$it" },
+                    v("vehicle.snapshot.timestamp_only_keys")?.takeIf { it.isNotBlank() }?.let { "timestampOnly=$it" }
+                ).joinToString("，")
+            ),
+            row(
+                "时间戳 / 新鲜度",
+                listOf(VehicleRedisKeys.LOCATION, VehicleRedisKeys.TRAFFIC_LIGHTS, VehicleRedisKeys.LANES),
+                listOfNotNull(
+                    v("vehicle.location_timestamp")?.let { "定位$it" },
+                    v("vehicle.traffic_light_timestamp")?.let { "交通灯$it" },
+                    v("vehicle.lane_timestamp")?.let { "车道线$it" },
+                    v("vehicle.snapshot.timestamp_only_keys")?.takeIf { it.isNotBlank() }?.let { "仅时间戳$it" }
+                ).joinToString("，")
+            ),
+            row(
+                "当前车速",
+                listOf(VehicleRedisKeys.SPEED, VehicleRedisKeys.LOCATION),
+                listOfNotNull(
+                    v("vehicle.speed_kmh")?.let { "$it km/h" },
+                    v("vehicle.speed_source")?.let { "来源$it" },
+                    v("vehicle.linear_velocity_mps")?.let { "线速度${it}m/s" }
+                ).joinToString("，")
+            ),
             row("当前档位", listOf(VehicleRedisKeys.DCU_INFO_1), v("vehicle.gear").orEmpty()),
             row("驻车状态", listOf(VehicleRedisKeys.DCU_INFO_1), v("vehicle.parking").orEmpty()),
             row("电量 / SOC", listOf(VehicleRedisKeys.BATTERY), v("vehicle.battery_soc_percent")?.let { "$it%" }.orEmpty()),
+            row(
+                "电池详情 / 电压 / 电流",
+                listOf(VehicleRedisKeys.BATTERY),
+                listOfNotNull(
+                    v("vehicle.battery_soc_percent")?.let { "SOC=${it}%" },
+                    v("vehicle.battery_voltage_v")?.let { "电压${it}V" },
+                    v("vehicle.battery_current_a")?.let { "电流${it}A" }
+                ).joinToString("，")
+            ),
             row("剩余里程 / 续航", listOf(VehicleRedisKeys.RANGE), v("vehicle.remaining_range_km")?.let { "$it km" }.orEmpty()),
             row(
                 "空调状态",
@@ -68,22 +106,46 @@ object RedisDebugRows {
                 ).joinToString("，")
             ),
             row(
-                "位置 / 经纬度 / 航向",
+                "位置 / 经纬度 / 航向 / RTK",
                 listOf(VehicleRedisKeys.LOCATION),
                 listOfNotNull(
                     v("vehicle.location_lon")?.let { "经度$it" },
                     v("vehicle.location_lat")?.let { "纬度$it" },
                     v("vehicle.heading_deg")?.let { "航向${it}°" },
-                    v("vehicle.linear_velocity_mps")?.let { "线速度${it}m/s" }
+                    v("vehicle.location_height_m")?.let { "高度${it}m" },
+                    v("vehicle.rtk_flag")?.let { "rtkflag=$it" }
                 ).joinToString("，")
             ),
             row(
-                "前方障碍物 / 最近目标",
+                "车辆姿态 / UTM / 速度分量",
+                listOf(VehicleRedisKeys.LOCATION),
+                listOfNotNull(
+                    v("vehicle.location_pitch")?.let { "pitch=$it" },
+                    v("vehicle.location_roll")?.let { "roll=$it" },
+                    v("vehicle.velocity_x_mps")?.let { "vx=${it}m/s" },
+                    v("vehicle.velocity_y_mps")?.let { "vy=${it}m/s" },
+                    v("vehicle.velocity_z_mps")?.let { "vz=${it}m/s" },
+                    v("vehicle.linear_acceleration_mps2")?.let { "a=${it}m/s²" },
+                    v("vehicle.angular_velocity_radps")?.let { "角速度$it" },
+                    v("vehicle.utm_x")?.let { "utmX=$it" },
+                    v("vehicle.utm_y")?.let { "utmY=$it" }
+                ).joinToString("，")
+            ),
+            row(
+                "障碍物数量 / 最近目标",
                 listOf(VehicleRedisKeys.OBSTACLES, VehicleRedisKeys.MAIN_OBSTACLE),
                 listOfNotNull(
+                    v("vehicle.obstacle_count")?.let { "数量$it" },
                     v("vehicle.nearest_obstacle_type")?.let { "类型$it" },
+                    v("vehicle.nearest_obstacle_id")?.let { "id=$it" },
                     v("vehicle.nearest_obstacle_x_m")?.let { "前向${it}m" },
                     v("vehicle.nearest_obstacle_y_m")?.let { "横向${it}m" },
+                    v("vehicle.nearest_obstacle_z_m")?.let { "高度${it}m" },
+                    v("vehicle.nearest_obstacle_distance_m")?.let { "距离${it}m" },
+                    v("vehicle.nearest_obstacle_velocity_mps")?.let { "速度${it}m/s" },
+                    v("vehicle.nearest_obstacle_length_m")?.let { "长${it}m" },
+                    v("vehicle.nearest_obstacle_width_m")?.let { "宽${it}m" },
+                    v("vehicle.nearest_obstacle_height_m")?.let { "高${it}m" },
                     v("vehicle.nearest_obstacle_confidence")?.let { "置信度$it" }
                 ).joinToString("，")
             ),
@@ -91,9 +153,35 @@ object RedisDebugRows {
                 "交通灯 / 红绿灯",
                 listOf(VehicleRedisKeys.TRAFFIC_LIGHTS),
                 listOfNotNull(
+                    v("vehicle.traffic_light_timestamp")?.let { "时间戳$it" },
+                    v("vehicle.traffic_light.business_data")?.let { "业务数据=$it" },
                     v("vehicle.traffic_light")?.let { "颜色$it" },
                     v("vehicle.traffic_light_confidence")?.let { "置信度$it" },
-                    v("vehicle.traffic_light_count")?.let { "数量$it" }
+                    v("vehicle.traffic_light_count")?.let { "数量$it" },
+                    v("vehicle.traffic_light_intersection_id")?.let { "路口$it" },
+                    v("vehicle.traffic_light_phase_id")?.let { "相位$it" },
+                    v("vehicle.traffic_light_remaining_s")?.let { "剩余${it}s" }
+                ).joinToString("，")
+            ),
+            row(
+                "车道线 / LaneList",
+                listOf(VehicleRedisKeys.LANES),
+                listOfNotNull(
+                    v("vehicle.lane_timestamp")?.let { "时间戳$it" },
+                    v("vehicle.lane.business_data")?.let { "业务数据=$it" },
+                    v("vehicle.lane_count")?.let { "车道$it" },
+                    v("vehicle.lane_line_count")?.let { "线条$it" },
+                    v("vehicle.lane_confidence")?.let { "置信度$it" }
+                ).joinToString("，")
+            ),
+            row(
+                "规划轨迹 / planned_trajectory",
+                listOf(VehicleRedisKeys.PLANNED_TRAJECTORY),
+                listOfNotNull(
+                    v("vehicle.trajectory.point_count")?.let { "点数$it" },
+                    v("vehicle.trajectory.length_m")?.let { "长度${it}m" },
+                    v("vehicle.trajectory.first_point")?.let { "起点$it" },
+                    v("vehicle.trajectory.last_point")?.let { "终点$it" }
                 ).joinToString("，")
             ),
             row(
@@ -151,15 +239,27 @@ object RedisDebugRows {
                 ).joinToString("，")
             ),
             row(
-                "Sam 协作场景 / V2X 类型",
+                "Sensor_SAM 实车状态",
+                listOf(VehicleRedisKeys.SAM),
+                listOfNotNull(
+                    v("vehicle.cooperation.auto_level")?.let { "autoLevel=$it" },
+                    v("vehicle.cooperation.driving_mode_fd")?.let { "drivingModeFd=$it" },
+                    v("vehicle.cooperation.gear_location_fd")?.let { "gearFd=$it" },
+                    v("vehicle.cooperation.steering_value_fd")?.let { "steering=$it" },
+                    v("vehicle.cooperation.acceleration_cmd")?.let { "accCmd=$it" },
+                    v("vehicle.cooperation.speed_mps")?.let { "speed=${it}m/s" }
+                ).joinToString("，")
+            ),
+            row(
+                "Sensor_SAM 协作场景 / V2X 类型",
                 listOf(VehicleRedisKeys.SAM),
                 listOfNotNull(v("vehicle.cooperation.scene"), v("vehicle.cooperation.v2x_type")?.let { "类型$it" }, v("vehicle.cooperation.scene_id")?.let { "sceneId=$it" })
                     .joinToString("，")
             ),
-            row("Sam 协作事件", listOf(VehicleRedisKeys.SAM), v("vehicle.cooperation.event").orEmpty()),
-            row("Sam 协作车数量", listOf(VehicleRedisKeys.SAM), v("vehicle.cooperation.collaborative_vehicle_count")?.let { "${it}辆" }.orEmpty()),
+            row("Sensor_SAM 协作事件", listOf(VehicleRedisKeys.SAM), v("vehicle.cooperation.event").orEmpty()),
+            row("Sensor_SAM 协作车数量", listOf(VehicleRedisKeys.SAM), v("vehicle.cooperation.collaborative_vehicle_count")?.let { "${it}辆" }.orEmpty()),
             row(
-                "Sam 协作决策 / 反馈 / 行为",
+                "Sensor_SAM 协作决策 / 反馈 / 行为",
                 listOf(VehicleRedisKeys.SAM),
                 listOfNotNull(
                     v("vehicle.cooperation.guide_decision")?.let { "引导决策$it" },
@@ -174,9 +274,10 @@ object RedisDebugRows {
 
     fun redisKeyRows(snapshot: VehicleReadOnlySnapshot): List<RedisDebugRow> = VehicleRedisKeys.defaultReadOnlyKeys.map { key ->
         val status = snapshot.keyStatuses[key]
+        val aliases = VehicleRedisKeys.aliases[key].orEmpty()
         RedisDebugRow(
             expectedInfo = redisKeyLabel(key),
-            redisKeys = listOf(key),
+            redisKeys = listOf(key) + aliases,
             readableStatus = when {
                 status == null -> "未读取"
                 status.decoded -> "已读到 / 已解码"
@@ -184,6 +285,7 @@ object RedisDebugRows {
                 else -> "未读到"
             },
             readableContent = listOfNotNull(
+                aliases.takeIf { it.isNotEmpty() }?.joinToString(prefix = "alias=", separator = "|"),
                 status?.updatedAtMs?.let { "updatedAt=$it" },
                 status?.error?.let { "error=$it" }
             ).joinToString("，").ifBlank { "key 正常" }
@@ -194,7 +296,14 @@ object RedisDebugRows {
         val decoded = snapshot.keyStatuses.values.count { it.decoded }
         val missing = snapshot.keyStatuses.values.count { !it.present }
         val errors = snapshot.keyStatuses.values.count { it.present && !it.decoded }
-        return "connected=${snapshot.diagnostics.connected}，decoded=$decoded/${VehicleRedisKeys.defaultReadOnlyKeys.size}，missing=$missing，decodeError=$errors"
+        val timestampOnly = timestampOnlyKeyList(snapshot)
+        return listOfNotNull(
+            "connected=${snapshot.diagnostics.connected}",
+            "decoded=$decoded/${VehicleRedisKeys.defaultReadOnlyKeys.size}",
+            "missing=$missing",
+            "decodeError=$errors",
+            timestampOnly.takeIf { it.isNotEmpty() }?.joinToString(prefix = "timestampOnly=", separator = "|")
+        ).joinToString("，")
     }
 
     private fun statusFor(snapshot: VehicleReadOnlySnapshot, keys: List<String>): String {
@@ -224,11 +333,18 @@ object RedisDebugRows {
         VehicleRedisKeys.AC_STATE -> "Redis key：空调状态"
         VehicleRedisKeys.BODY_STATE -> "Redis key：车门 / 车身"
         VehicleRedisKeys.TPMS -> "Redis key：胎压"
-        VehicleRedisKeys.LOCATION -> "Redis key：位置 / 航向"
+        VehicleRedisKeys.LOCATION -> "Redis key：位置 / 航向 / RTK"
         VehicleRedisKeys.OBSTACLES -> "Redis key：障碍物列表"
         VehicleRedisKeys.TRAFFIC_LIGHTS -> "Redis key：交通灯"
+        VehicleRedisKeys.LANES -> "Redis key：车道线列表"
         VehicleRedisKeys.MAIN_OBSTACLE -> "Redis key：主障碍物 / 感知故障"
-        VehicleRedisKeys.SAM -> "Redis key：Sam 协作信息"
+        VehicleRedisKeys.PLANNED_TRAJECTORY -> "Redis key：规划轨迹"
+        VehicleRedisKeys.SAM -> "Redis key：Sensor_SAM 协作信息"
         else -> "Redis key：$key"
     }
+
+    private fun timestampOnlyKeyList(snapshot: VehicleReadOnlySnapshot): List<String> = listOfNotNull(
+        snapshot.trafficLight?.takeIf { !it.hasBusinessData && it.timestamp != null }?.let { VehicleRedisKeys.TRAFFIC_LIGHTS },
+        snapshot.laneStatus?.takeIf { !it.hasBusinessData && it.timestamp != null }?.let { VehicleRedisKeys.LANES }
+    )
 }
