@@ -36,7 +36,7 @@ VoiceForegroundService
 
 ## Security/offline constraints
 
-- No `android.permission.INTERNET`.
+- `android.permission.INTERNET` is intentionally present for remote Redis read-only status checks and GitHub release/update checks. The Android Redis path issues only `GET` after optional `AUTH`/`SELECT`; simulator write scripts refuse non-loopback writes unless explicitly acknowledged.
 - Unsafe/prompt-injection-like ASR text maps to `unsafe_rejected`, does not mutate vehicle state, and does not create Unity action JSON.
 - APK permission checks are enforced by `scripts/check_apk_permissions.sh`.
 

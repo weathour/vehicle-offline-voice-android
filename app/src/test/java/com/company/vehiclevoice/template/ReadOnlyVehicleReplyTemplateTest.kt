@@ -19,6 +19,7 @@ class ReadOnlyVehicleReplyTemplateTest {
 
         assertTrue(engine.render(parser.parse("速度怎样"), store).contains("12.5"))
         assertTrue(engine.render(parser.parse("速度怎样"), store).contains("Sensor_Location.linear_velocity"))
+        assertTrue(engine.render(parser.parse("当前档位"), store).contains("schema 待车端确认"))
         assertTrue(engine.render(parser.parse("电量多少"), store).contains("76.0"))
         assertTrue(engine.render(parser.parse("电池详情"), store).contains("电压612.0伏"))
         assertTrue(engine.render(parser.parse("空调开了吗"), store).contains("空调开启"))

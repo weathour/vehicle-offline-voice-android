@@ -83,9 +83,8 @@ class RedisVehicleSnapshotProvider(
                             speedSource = "BC_Veh_Spd"
                         }
                     }
-                    VehicleRedisKeys.DCU_INFO_1 -> VehicleInterfaceProto.decodeDcuInfo1(value.payload).also {
-                        gear = it.gear
-                        parking = it.parking
+                    VehicleRedisKeys.DCU_INFO_1 -> {
+                        error("schema_unconfirmed_dcu_info_1")
                     }
                     VehicleRedisKeys.DCU_INFO_2 -> dcuInfo2 = VehicleInterfaceProto.decodeDcuInfo2(value.payload)
                     VehicleRedisKeys.BATTERY -> VehicleInterfaceProto.decodeBattery(value.payload).also {

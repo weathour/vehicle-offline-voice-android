@@ -57,8 +57,8 @@ object RedisDebugRows {
                     v("vehicle.linear_velocity_mps")?.let { "线速度${it}m/s" }
                 ).joinToString("，")
             ),
-            row("当前档位", listOf(VehicleRedisKeys.DCU_INFO_1), v("vehicle.gear").orEmpty()),
-            row("驻车状态", listOf(VehicleRedisKeys.DCU_INFO_1), v("vehicle.parking").orEmpty()),
+            row("当前档位（schema 待确认）", listOf(VehicleRedisKeys.DCU_INFO_1), "DCU_INFO_1 实车字段含 timestamp，旧 gear 映射暂不作稳定结论"),
+            row("驻车状态（schema 待确认）", listOf(VehicleRedisKeys.DCU_INFO_1), "DCU_INFO_1 field 3 已观测为 shifted/changed status，暂不可信为 parking"),
             row("电量 / SOC", listOf(VehicleRedisKeys.BATTERY), v("vehicle.battery_soc_percent")?.let { "$it%" }.orEmpty()),
             row(
                 "电池详情 / 电压 / 电流",

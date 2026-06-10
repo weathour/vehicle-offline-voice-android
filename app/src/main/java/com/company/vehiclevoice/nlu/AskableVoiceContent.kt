@@ -28,7 +28,6 @@ object AskableVoiceContent {
             description = "优先展示实车 Redis 已稳定解码的只读车况。",
             questions = listOf(
                 Question("当前车速多少", "vehicle_speed_query", "车速，优先来自 Sensor_Location.linear_velocity"),
-                Question("当前档位", "vehicle_gear_query", "档位与驻车状态"),
                 Question("电量多少", "vehicle_battery_query", "SOC 百分比"),
                 Question("电池详情", "vehicle_battery_detail_query", "SOC、电压、电流"),
                 Question("还能跑多远", "vehicle_range_query", "DCU_INFO_St 剩余续航")
@@ -74,6 +73,7 @@ object AskableVoiceContent {
             description = "可以问，但本轮只给 schema 待确认或暂未可靠读取的调试回复，不作为稳定能力宣传。",
             questions = listOf(
                 Question("空调开了吗", "vehicle_ac_query", "空调开关、模式、风量", "本次实车快照缺少 ACM_INF2/ACM_INF4，schema 待确认", CapabilityLevel.Degraded),
+                Question("当前档位", "vehicle_gear_query", "档位与驻车状态", "DCU_INFO_1 实车字段含 timestamp，旧 gear/parking 映射待确认", CapabilityLevel.Degraded),
                 Question("当前温度", "vehicle_temperature_query", "车内、车外、空调设定温度", "本次实车快照缺少温度业务字段，schema 待确认", CapabilityLevel.Degraded),
                 Question("车门关了吗", "vehicle_door_query", "前门、中门状态", "BC_AutoD_Veh_St 旧字段映射待确认", CapabilityLevel.Degraded),
                 Question("胎压正常吗", "vehicle_tire_query", "胎压、胎温、报警摘要", "本次实车快照缺少 TPMS_INFO", CapabilityLevel.Degraded),

@@ -15,8 +15,8 @@ class RedisVehicleSnapshotProviderTest {
         assertEquals("simulated-redis-protobuf", snapshot.sourceName)
         assertTrue(snapshot.diagnostics.connected)
         assertEquals(12.5f, snapshot.speedKmh!!, 0.01f)
-        assertEquals("D", snapshot.gear)
-        assertEquals("释放", snapshot.parking)
+        assertEquals(null, snapshot.gear)
+        assertEquals(null, snapshot.parking)
         assertEquals(76.0f, snapshot.batterySocPercent!!, 0.01f)
         assertEquals(612.0f, snapshot.batteryVoltageVolts!!, 0.01f)
         assertEquals(8.5f, snapshot.batteryCurrentAmps!!, 0.01f)
@@ -40,7 +40,8 @@ class RedisVehicleSnapshotProviderTest {
         assertEquals("进行中", snapshot.cooperativeState!!.eventType)
         assertEquals(2, snapshot.cooperativeState!!.collaborativeVehicleCount)
         assertEquals(4, snapshot.cooperativeState!!.drivingModeFeedback)
-        assertTrue(snapshot.keyStatuses.values.all { it.decoded })
+        assertEquals("schema_unconfirmed_dcu_info_1", snapshot.keyStatuses.getValue(VehicleRedisKeys.DCU_INFO_1).error)
+        assertTrue(snapshot.keyStatuses.values.filterNot { it.key == VehicleRedisKeys.DCU_INFO_1 }.all { it.decoded })
     }
 
     @Test
@@ -66,7 +67,33 @@ class RedisVehicleSnapshotProviderTest {
         assertEquals("激活", map["vehicle.lka.status"])
         assertEquals("V2V协作式变道", map["vehicle.cooperation.scene"])
         assertTrue(map["vehicle.summary.basic"]!!.contains("车速12.5km/h"))
+        assertFalse(map.containsKey("vehicle.gear"))
         assertTrue(map["vehicle.summary.cooperation"]!!.contains("协作车2辆"))
+    }
+
+    @Test
+    fun dcuInfo1LiveShapeIsSchemaPendingNotStableGear() {
+        val source = SimulatedRedisBinaryDataSource(
+            mapOf(
+                VehicleRedisKeys.DCU_INFO_1 to ProtoWire.build {
+                    double(1, 1_781_072_319.222)
+                    int32(2, 3)
+                    int32(3, 2)
+                    int32(5, 1)
+                }
+            ),
+            clockMs = { 12L }
+        )
+
+        val snapshot = RedisVehicleSnapshotProvider(source, keys = listOf(VehicleRedisKeys.DCU_INFO_1)).readSnapshot()
+        val map = VehicleSnapshotStateMapper.toStateMap(snapshot)
+
+        assertEquals(null, snapshot.gear)
+        assertEquals(null, snapshot.parking)
+        assertEquals(false, snapshot.keyStatuses.getValue(VehicleRedisKeys.DCU_INFO_1).decoded)
+        assertEquals("schema_unconfirmed_dcu_info_1", snapshot.keyStatuses.getValue(VehicleRedisKeys.DCU_INFO_1).error)
+        assertFalse(map.containsKey("vehicle.gear"))
+        assertTrue(map.values.any { it.contains("schema_unconfirmed_dcu_info_1") })
     }
 
     @Test

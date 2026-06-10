@@ -17,7 +17,7 @@ class ReplyTemplateEngine {
         "vehicle_data_health_query" -> renderDataHealth(store)
         "vehicle_data_freshness_query" -> renderDataFreshness(store)
         "vehicle_speed_query" -> renderSpeed(store)
-        "vehicle_gear_query" -> store.valueReply("vehicle.gear", "当前档位", "", "暂未读取到档位")
+        "vehicle_gear_query" -> renderSchemaPendingValue(store, "vehicle.gear", "当前档位", "暂未可靠读取档位，DCU_INFO_1 schema 待车端确认")
         "vehicle_battery_query" -> store.valueReply("vehicle.battery_soc_percent", "当前电量", "%", "暂未读取到电量")
         "vehicle_battery_detail_query" -> renderBatteryDetail(store)
         "vehicle_range_query" -> store.valueReply("vehicle.remaining_range_km", "剩余里程", "公里", "暂未读取到剩余里程")
