@@ -81,6 +81,7 @@ app/build/outputs/apk/debug/app-debug.apk
 
 ## 文档入口
 
+- 开发与联调环境配置：`docs/development-environment.md`
 - 阶段二交接：`docs/phase2-read-only-vehicle-voice-handoff-2026-06-08.md`
 - 阶段二测试记录：`docs/phase2-e2e-test-run-2026-06-08.md`
 - 上车 UI 整理：`docs/stage3-vehicle-test-ui-plan-2026-06-08.md`
