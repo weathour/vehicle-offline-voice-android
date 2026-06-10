@@ -18,6 +18,9 @@ class RedisVehicleSnapshotProviderTest {
         assertEquals("D", snapshot.gear)
         assertEquals("释放", snapshot.parking)
         assertEquals(76.0f, snapshot.batterySocPercent!!, 0.01f)
+        assertEquals(612.0f, snapshot.batteryVoltageVolts!!, 0.01f)
+        assertEquals(8.5f, snapshot.batteryCurrentAmps!!, 0.01f)
+        assertEquals("Sensor_Location.linear_velocity", snapshot.speedSource)
         assertEquals("开启", snapshot.acPower)
         assertEquals("制冷", snapshot.acMode)
         assertEquals("已关闭", snapshot.frontDoor)
@@ -26,10 +29,17 @@ class RedisVehicleSnapshotProviderTest {
         assertEquals("ACC激活，LKA激活，L2功能激活", snapshot.l2Status!!.summary)
         assertEquals("无故障", snapshot.perceptionFaults!!.summary)
         assertEquals("绿灯", snapshot.trafficLight!!.color)
+        assertTrue(snapshot.trafficLight!!.hasBusinessData)
+        assertEquals(2, snapshot.obstacleCount)
         assertEquals("车辆", snapshot.nearestObstacle!!.type)
+        assertEquals(101, snapshot.nearestObstacle!!.id)
+        assertEquals(2, snapshot.obstacles.size)
+        assertEquals(2, snapshot.laneStatus!!.laneCount)
+        assertEquals(3, snapshot.plannedTrajectory!!.pointCount)
         assertEquals("V2V协作式变道", snapshot.cooperativeState!!.sceneName)
         assertEquals("进行中", snapshot.cooperativeState!!.eventType)
         assertEquals(2, snapshot.cooperativeState!!.collaborativeVehicleCount)
+        assertEquals(4, snapshot.cooperativeState!!.drivingModeFeedback)
         assertTrue(snapshot.keyStatuses.values.all { it.decoded })
     }
 
@@ -40,10 +50,17 @@ class RedisVehicleSnapshotProviderTest {
         val map = VehicleSnapshotStateMapper.toStateMap(snapshot)
 
         assertEquals("12.5", map["vehicle.speed_kmh"])
+        assertEquals("Sensor_Location.linear_velocity", map["vehicle.speed_source"])
         assertEquals("76.0", map["vehicle.battery_soc_percent"])
+        assertEquals("612.0", map["vehicle.battery_voltage_v"])
+        assertEquals("8.5", map["vehicle.battery_current_a"])
         assertEquals("开启", map["vehicle.ac_power"])
         assertEquals("106.551600", map["vehicle.location_lon"])
+        assertEquals("1", map["vehicle.rtk_flag"])
+        assertEquals("2", map["vehicle.obstacle_count"])
+        assertEquals("3", map["vehicle.trajectory.point_count"])
         assertEquals("绿灯", map["vehicle.traffic_light"])
+        assertEquals("true", map["vehicle.lane.business_data"])
         assertEquals("true", map["vehicle.tire.normal"])
         assertEquals("激活", map["vehicle.acc.status"])
         assertEquals("激活", map["vehicle.lka.status"])
@@ -111,6 +128,55 @@ class RedisVehicleSnapshotProviderTest {
         assertEquals("V2I动态车速限制", map["vehicle.cooperation.scene"])
         assertEquals("开始", map["vehicle.cooperation.event"])
     }
+
+    @Test
+    fun providerReadsLegacyAliasesForRenamedVehicleKeys() {
+        val source = SimulatedRedisBinaryDataSource(
+            mapOf(
+                VehicleRedisKeys.RANGE_LEGACY to SimulatedVehicleRedisFixtures.range(88.0f),
+                VehicleRedisKeys.TRAFFIC_LIGHTS_LEGACY to SimulatedVehicleRedisFixtures.trafficLights(color = 2),
+                VehicleRedisKeys.SAM_LEGACY to SimulatedVehicleRedisFixtures.sam(sceneId = 12, eventType = 1, collaborativeVehicleCount = 4)
+            ),
+            clockMs = { 7L }
+        )
+
+        val snapshot = RedisVehicleSnapshotProvider(
+            dataSource = source,
+            keys = listOf(VehicleRedisKeys.RANGE, VehicleRedisKeys.TRAFFIC_LIGHTS, VehicleRedisKeys.SAM)
+        ).readSnapshot()
+
+        assertEquals(88.0f, snapshot.remainingRangeKm!!, 0.01f)
+        assertEquals("黄灯", snapshot.trafficLight!!.color)
+        assertEquals("V2I编队行驶", snapshot.cooperativeState!!.sceneName)
+        assertTrue(snapshot.keyStatuses.getValue(VehicleRedisKeys.RANGE).decoded)
+        assertTrue(snapshot.keyStatuses.getValue(VehicleRedisKeys.TRAFFIC_LIGHTS).decoded)
+        assertTrue(snapshot.keyStatuses.getValue(VehicleRedisKeys.SAM).decoded)
+    }
+
+    @Test
+    fun timestampOnlyTrafficAndLaneAreMarkedWithoutBusinessData() {
+        val source = SimulatedRedisBinaryDataSource(
+            mapOf(
+                VehicleRedisKeys.TRAFFIC_LIGHTS to SimulatedVehicleRedisFixtures.trafficLightsTimestampOnly(),
+                VehicleRedisKeys.LANES to SimulatedVehicleRedisFixtures.laneListTimestampOnly()
+            ),
+            clockMs = { 9L }
+        )
+
+        val snapshot = RedisVehicleSnapshotProvider(
+            dataSource = source,
+            keys = listOf(VehicleRedisKeys.TRAFFIC_LIGHTS, VehicleRedisKeys.LANES)
+        ).readSnapshot()
+        val map = VehicleSnapshotStateMapper.toStateMap(snapshot)
+
+        assertFalse(snapshot.trafficLight!!.hasBusinessData)
+        assertFalse(snapshot.laneStatus!!.hasBusinessData)
+        assertEquals("false", map["vehicle.traffic_light.business_data"])
+        assertEquals("false", map["vehicle.lane.business_data"])
+        assertTrue(map["vehicle.snapshot.timestamp_only_keys"]!!.contains(VehicleRedisKeys.TRAFFIC_LIGHTS))
+        assertTrue(map["vehicle.snapshot.timestamp_only_keys"]!!.contains(VehicleRedisKeys.LANES))
+    }
+
     @Test
     fun providerStopsReadingRemainingKeysWhenSnapshotDeadlineIsExceeded() {
         var now = 0L

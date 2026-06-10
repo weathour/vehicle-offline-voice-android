@@ -32,6 +32,17 @@ class ReadOnlyVehicleQueryIntentTest {
             "协作事件开始了吗" to "vehicle_cooperation_event_query",
             "现在有几辆协作车" to "vehicle_cooperation_count_query",
             "引导决策是什么" to "vehicle_cooperation_decision_query",
+            "Redis状态" to "vehicle_data_health_query",
+            "数据新鲜度" to "vehicle_data_freshness_query",
+            "Key诊断" to "vehicle_key_diagnostic_query",
+            "电池详情" to "vehicle_battery_detail_query",
+            "RTK状态" to "vehicle_rtk_query",
+            "车辆姿态" to "vehicle_pose_query",
+            "障碍物数量" to "vehicle_obstacle_count_query",
+            "最近障碍物" to "vehicle_nearest_obstacle_query",
+            "规划轨迹" to "vehicle_trajectory_query",
+            "车道线状态" to "vehicle_lane_query",
+            "SAM状态" to "vehicle_sam_status_query",
             "检查当前车辆状态" to "status_query",
             "查看车况" to "status_query"
         )
@@ -88,7 +99,14 @@ class ReadOnlyVehicleQueryIntentTest {
             "需要借管吗" to "vehicle_takeover_query",
             "有没有告井" to "vehicle_fault_query",
             "写作时间开始了吗" to "vehicle_cooperation_event_query",
-            "引到绝策是什么" to "vehicle_cooperation_decision_query"
+            "引到绝策是什么" to "vehicle_cooperation_decision_query",
+            "瑞迪斯状态" to "vehicle_data_health_query",
+            "心鲜度" to "vehicle_data_freshness_query",
+            "建诊断" to "vehicle_key_diagnostic_query",
+            "二梯开状态" to "vehicle_rtk_query",
+            "归迹点" to "vehicle_trajectory_query",
+            "车到线状态" to "vehicle_lane_query",
+            "山姆反馈" to "vehicle_sam_status_query"
         )
 
         cases.forEach { (text, intent) ->

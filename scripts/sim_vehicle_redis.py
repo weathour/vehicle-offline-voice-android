@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write/read Phase 1 simulated vehicle protobuf payloads into Redis.
+"""Write/read simulated real-vehicle protobuf payloads into Redis.
 
 Works with the dependency-free `scripts/sim_redis_server.py` and with real Redis
 servers that support the basic RESP commands used here.
@@ -19,7 +19,8 @@ KEY_SPEED = "BC_Veh_Spd"
 KEY_DCU_INFO_1 = "DCU_INFO_1"
 KEY_DCU_INFO_2 = "DCU_INFO_2"
 KEY_BATTERY = "DCU_Battery_St"
-KEY_RANGE = "DCU_INFO"
+KEY_RANGE = "DCU_INFO_St"
+KEY_RANGE_LEGACY = "DCU_INFO"
 KEY_L2 = "DCU_L2_St"
 KEY_AC_TEMP = "ACM_INF2"
 KEY_AC_STATE = "ACM_INF4"
@@ -27,9 +28,13 @@ KEY_BODY = "BC_AutoD_Veh_St"
 KEY_TPMS = "TPMS_INFO"
 KEY_LOCATION = "Sensor_Location"
 KEY_OBSTACLES = "Sensor_Mmobstacles"
-KEY_TRAFFIC = "Sensor_Trafficlightlist"
+KEY_TRAFFIC = "Sensor_TrafficLightlist"
+KEY_TRAFFIC_LEGACY = "Sensor_Trafficlightlist"
+KEY_LANES = "Sensor_Lanelist"
 KEY_MAIN_OBSTACLE = "PFC_Main_Obstacle_INF"
-KEY_SAM = "Sam"  # simulator key pending real Redis confirmation
+KEY_TRAJECTORY = "planned_trajectory"
+KEY_SAM = "Sensor_SAM"
+KEY_SAM_LEGACY = "Sam"
 
 DEFAULT_KEYS = [
     KEY_SPEED,
@@ -45,7 +50,9 @@ DEFAULT_KEYS = [
     KEY_LOCATION,
     KEY_OBSTACLES,
     KEY_TRAFFIC,
+    KEY_LANES,
     KEY_MAIN_OBSTACLE,
+    KEY_TRAJECTORY,
     KEY_SAM,
 ]
 
@@ -130,11 +137,11 @@ def dcu_info_2(
 
 
 def battery(soc: float) -> bytes:
-    return float32(1, 612.0) + float32(2, 8.5) + float32(3, soc)
+    return double64(1, 1_717_820_800.0) + float32(2, 612.0) + float32(3, 8.5) + float32(4, soc)
 
 
 def vehicle_range(km: float) -> bytes:
-    return float32(1, km)
+    return double64(1, 1_717_820_800.0) + float32(2, km)
 
 
 def l2_state(
@@ -195,8 +202,20 @@ def location() -> bytes:
         double64(1, 1_717_820_800.0),
         double64(2, 106.5516),
         double64(3, 29.5630),
+        double64(4, 302.8),
+        double64(5, -0.02),
+        double64(6, 0.01),
         double64(7, 92.0),
-        double64(8, 3.47),
+        double64(8, 12.5 / 3.6),
+        double64(9, 3.4),
+        double64(10, 0.2),
+        double64(11, 0.0),
+        double64(12, 0.3),
+        double64(16, 0.002),
+        double64(22, -5714.3),
+        double64(23, 579.0),
+        double64(24, 302.8),
+        int32(25, 1),
     ])
 
 
@@ -205,16 +224,49 @@ def obstacles(kind: int = 2, x: float = 18.2, y: float = -0.5, confidence: float
         int32(1, 101),
         double64(2, x),
         double64(3, y),
-        double64(8, 2.1),
+        double64(4, 0.4),
+        double64(9, 2.1),
+        double64(12, 4.6),
+        double64(13, 1.8),
+        double64(14, 1.6),
         int32(15, kind),
         double64(16, confidence),
+        double64(23, 106.5517),
+        double64(24, 29.5631),
+    ])
+    item2 = b"".join([
+        int32(1, 102),
+        double64(2, 28.0),
+        double64(3, 1.0),
+        double64(9, 0.5),
+        int32(15, kind),
+        double64(16, 0.72),
+    ])
+    return double64(1, 1_717_820_800.0) + int32(2, 2) + length_delimited(3, item) + length_delimited(3, item2)
+
+
+def traffic(color: int = 3, confidence: float = 0.93) -> bytes:
+    item = b"".join([
+        int32(1, color),
+        double64(2, confidence),
+        int32(3, 120),
+        int32(4, 48),
+        int32(5, 32),
+        int32(6, 18),
+        int32(7, 1),
+        int32(8, 2),
+        double64(9, 18.0),
     ])
     return double64(1, 1_717_820_800.0) + int32(2, 1) + length_delimited(3, item)
 
 
-def traffic(color: int = 3, confidence: float = 0.93) -> bytes:
-    item = int32(1, color) + double64(2, confidence) + int32(3, 120) + int32(4, 48) + int32(5, 32) + int32(6, 18)
-    return double64(1, 1_717_820_800.0) + int32(2, 1) + length_delimited(3, item)
+def lane_list(count: int = 2, confidence: float = 0.82) -> bytes:
+    item = int32(1, 1) + int32(2, 2) + double64(6, confidence)
+    return double64(1, 1_717_820_800.0) + int32(2, count) + length_delimited(3, item)
+
+
+def planned_trajectory() -> bytes:
+    return b"[[-2709.7, 467.3], [-2708.7, 467.3], [-2690.2, 464.0]]"
 
 
 def main_obstacle(
@@ -282,7 +334,9 @@ def default_payloads() -> Dict[str, bytes]:
         KEY_LOCATION: location(),
         KEY_OBSTACLES: obstacles(),
         KEY_TRAFFIC: traffic(),
+        KEY_LANES: lane_list(),
         KEY_MAIN_OBSTACLE: main_obstacle(),
+        KEY_TRAJECTORY: planned_trajectory(),
         KEY_SAM: sam(),
     }
 
@@ -379,7 +433,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("defaults", help="write default payloads for all Phase 1 keys")
+    sub.add_parser("defaults", help="write default payloads for all real-vehicle read-only keys")
     sub.add_parser("status", help="list keys and payload lengths")
 
     p = sub.add_parser("set-speed"); p.add_argument("--value", type=float, required=True)
@@ -389,6 +443,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("set-door"); p.add_argument("--front", choices=["open", "closed"], default="closed"); p.add_argument("--mid", choices=["open", "closed"], default="closed")
     p = sub.add_parser("set-tire"); p.add_argument("--pressure", type=int, default=830); p.add_argument("--temp", type=float, default=36.0); p.add_argument("--alarm", choices=["none", "leak", "low", "high_temp", "lost"], default="none")
     p = sub.add_parser("set-traffic-light"); p.add_argument("--color", choices=sorted(COLOR), required=True)
+    p = sub.add_parser("set-lane"); p.add_argument("--count", type=int, default=2); p.add_argument("--confidence", type=float, default=0.82)
+    sub.add_parser("set-trajectory")
     p = sub.add_parser("set-obstacle"); p.add_argument("--type", choices=sorted(OBSTACLE_TYPE), default="vehicle"); p.add_argument("--x", type=float, default=18.2); p.add_argument("--y", type=float, default=-0.5)
     p = sub.add_parser("set-warning")
     p.add_argument("--auto-limit", type=int, default=0, help="DCU_INFO_2 field 1 enum, e.g. 32 door not closed")
@@ -447,6 +503,10 @@ def main() -> int:
         client.set(KEY_TPMS, tpms(pressure=args.pressure, temp=args.temp, high_temp=1 if args.alarm == "high_temp" else 0, leak=1 if args.alarm == "leak" else 0, lost=1 if args.alarm == "lost" else 0, pressure_alarm=3 if args.alarm == "low" else 2)); print("updated tire state")
     elif args.command == "set-traffic-light":
         client.set(KEY_TRAFFIC, traffic(color=COLOR[args.color])); print(f"traffic={args.color}")
+    elif args.command == "set-lane":
+        client.set(KEY_LANES, lane_list(count=args.count, confidence=args.confidence)); print("updated lane list")
+    elif args.command == "set-trajectory":
+        client.set(KEY_TRAJECTORY, planned_trajectory()); print("updated planned trajectory")
     elif args.command == "set-obstacle":
         client.set(KEY_OBSTACLES, obstacles(kind=OBSTACLE_TYPE[args.type], x=args.x, y=args.y)); client.set(KEY_MAIN_OBSTACLE, main_obstacle(kind=OBSTACLE_TYPE[args.type], x=args.x, y=args.y)); print("updated obstacle")
     elif args.command == "set-warning":
@@ -456,7 +516,7 @@ def main() -> int:
     elif args.command == "set-perception-fault":
         client.set(KEY_MAIN_OBSTACLE, main_obstacle(camera_fault=args.camera, radar_fault=args.radar, vehicle_fault=args.vehicle, fusion_fault=args.fusion)); print("updated perception fault state")
     elif args.command == "set-sam":
-        client.set(KEY_SAM, sam(scene=args.scene, event=EVENT_TYPE[args.event], count=args.count, guide=args.guide, feedback=args.feedback, behavior=args.behavior)); print("updated Sam cooperative state")
+        client.set(KEY_SAM, sam(scene=args.scene, event=EVENT_TYPE[args.event], count=args.count, guide=args.guide, feedback=args.feedback, behavior=args.behavior)); print("updated Sensor_SAM cooperative state")
     elif args.command == "corrupt":
         client.set(args.key, b"\x0d\x01"); print(f"corrupted {args.key}")
     elif args.command == "delete":

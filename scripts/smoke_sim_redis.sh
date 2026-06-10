@@ -32,10 +32,17 @@ python3 scripts/sim_vehicle_redis.py --host "$HOST" --port "$PORT" set-speed --v
 python3 scripts/sim_vehicle_redis.py --host "$HOST" --port "$PORT" get --key BC_Veh_Spd | tee /tmp/sim_vehicle_redis_get.txt
 python3 scripts/sim_vehicle_redis.py --host "$HOST" --port "$PORT" set-tire --alarm low --pressure 650
 python3 scripts/sim_vehicle_redis.py --host "$HOST" --port "$PORT" set-sam --scene 11 --event start --count 3
+python3 scripts/sim_vehicle_redis.py --host "$HOST" --port "$PORT" set-lane --count 2 --confidence 0.8
+python3 scripts/sim_vehicle_redis.py --host "$HOST" --port "$PORT" set-trajectory
 python3 scripts/sim_vehicle_redis.py --host "$HOST" --port "$PORT" corrupt --key BC_Veh_Spd
-python3 scripts/sim_vehicle_redis.py --host "$HOST" --port "$PORT" delete --key Sam
+python3 scripts/sim_vehicle_redis.py --host "$HOST" --port "$PORT" delete --key Sensor_SAM
 python3 scripts/sim_vehicle_redis.py --host "$HOST" --port "$PORT" status
 
 grep -q 'BC_Veh_Spd' /tmp/sim_vehicle_redis_status.txt
+grep -q 'DCU_INFO_St' /tmp/sim_vehicle_redis_status.txt
+grep -q 'Sensor_TrafficLightlist' /tmp/sim_vehicle_redis_status.txt
+grep -q 'Sensor_Lanelist' /tmp/sim_vehicle_redis_status.txt
+grep -q 'planned_trajectory' /tmp/sim_vehicle_redis_status.txt
+grep -q 'Sensor_SAM' /tmp/sim_vehicle_redis_status.txt
 grep -q 'hex=' /tmp/sim_vehicle_redis_get.txt
 echo "sim Redis smoke PASS on ${HOST}:${PORT}"
