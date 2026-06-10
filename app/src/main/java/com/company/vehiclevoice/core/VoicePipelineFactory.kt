@@ -120,7 +120,8 @@ object VoicePipelineFactory {
             asrEngine = VoskOfflineAsrEngine(modelPath = modelPath),
             ttsEngine = ttsEngineFactory(),
             logSink = logSink,
-            readOnlySnapshotProvider = readOnlySnapshotProvider
+            readOnlySnapshotProvider = readOnlySnapshotProvider,
+            allowVehicleControlActions = false
         )
     }
 
@@ -130,7 +131,8 @@ object VoicePipelineFactory {
         asrEngine: AsrEngine = ScriptedAsrEngine.single("打开空调"),
         ttsEngine: TtsEngine = MockTtsEngine(),
         logSink: EventLogSink,
-        readOnlySnapshotProvider: VehicleReadOnlySnapshotProvider? = RedisVehicleSnapshotProvider.simulated()
+        readOnlySnapshotProvider: VehicleReadOnlySnapshotProvider? = RedisVehicleSnapshotProvider.simulated(),
+        allowVehicleControlActions: Boolean = true
     ): VoicePipeline = VoicePipeline(
         audioSource = audioSource,
         keywordSpotter = keywordSpotter,
@@ -145,6 +147,7 @@ object VoicePipelineFactory {
         unityActionJsonEncoder = UnityActionJsonEncoder(),
         unityEventSink = RecordingUnityEventSink(),
         logSink = logSink,
-        readOnlySnapshotProvider = readOnlySnapshotProvider
+        readOnlySnapshotProvider = readOnlySnapshotProvider,
+        allowVehicleControlActions = allowVehicleControlActions
     )
 }

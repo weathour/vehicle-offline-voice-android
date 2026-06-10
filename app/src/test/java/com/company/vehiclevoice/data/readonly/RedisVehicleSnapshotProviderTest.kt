@@ -178,6 +178,47 @@ class RedisVehicleSnapshotProviderTest {
     }
 
     @Test
+    fun timestampOnlySpeedKeyDoesNotHideLocationSpeedSource() {
+        val source = SimulatedRedisBinaryDataSource(
+            mapOf(
+                VehicleRedisKeys.SPEED to ProtoWire.build { double(1, 1_717_820_800.0) },
+                VehicleRedisKeys.LOCATION to SimulatedVehicleRedisFixtures.location()
+            ),
+            clockMs = { 10L }
+        )
+
+        val snapshot = RedisVehicleSnapshotProvider(
+            dataSource = source,
+            keys = listOf(VehicleRedisKeys.SPEED, VehicleRedisKeys.LOCATION)
+        ).readSnapshot()
+        val map = VehicleSnapshotStateMapper.toStateMap(snapshot)
+
+        assertEquals("Sensor_Location.linear_velocity", snapshot.speedSource)
+        assertEquals(false, snapshot.keyStatuses.getValue(VehicleRedisKeys.SPEED).decoded)
+        assertEquals("business_value_missing_or_timestamp_only", snapshot.keyStatuses.getValue(VehicleRedisKeys.SPEED).error)
+        assertTrue(map["vehicle.snapshot.timestamp_only_keys"]!!.contains(VehicleRedisKeys.SPEED))
+    }
+
+    @Test
+    fun samWithoutSceneIdSummarizesEvidenceAsInsufficient() {
+        val source = SimulatedRedisBinaryDataSource(
+            mapOf(
+                VehicleRedisKeys.SAM to ProtoWire.build {
+                    double(1, 1_717_820_800.0)
+                    string(5, "L4")
+                    double(10, 3.47)
+                }
+            ),
+            clockMs = { 11L }
+        )
+
+        val snapshot = RedisVehicleSnapshotProvider(dataSource = source, keys = listOf(VehicleRedisKeys.SAM)).readSnapshot()
+
+        assertTrue(snapshot.cooperativeState!!.summary.contains("未上报scene_id"))
+        assertTrue(snapshot.cooperativeState!!.summary.contains("不能判断V2V/V2I"))
+    }
+
+    @Test
     fun providerStopsReadingRemainingKeysWhenSnapshotDeadlineIsExceeded() {
         var now = 0L
         val source = object : BinaryVehicleDataSource {

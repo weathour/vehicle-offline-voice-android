@@ -8,12 +8,33 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import ipaddress
 import socket
 import struct
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 6379
+
+MUTATING_COMMANDS = {
+    "defaults",
+    "set-speed",
+    "set-battery",
+    "set-range",
+    "set-ac",
+    "set-door",
+    "set-tire",
+    "set-traffic-light",
+    "set-lane",
+    "set-trajectory",
+    "set-obstacle",
+    "set-warning",
+    "set-l2",
+    "set-perception-fault",
+    "set-sam",
+    "corrupt",
+    "delete",
+}
 
 KEY_SPEED = "BC_Veh_Spd"
 KEY_DCU_INFO_1 = "DCU_INFO_1"
@@ -431,6 +452,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Simulate vehicle Redis/protobuf values")
     parser.add_argument("--host", default=DEFAULT_HOST)
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument(
+        "--i-understand-this-writes",
+        action="store_true",
+        help="Allow mutating commands against non-loopback Redis hosts. Required outside localhost."
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("defaults", help="write default payloads for all real-vehicle read-only keys")
@@ -480,9 +506,33 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def is_loopback_host(host: str) -> bool:
+    lowered = host.strip().lower()
+    if lowered in {"localhost", "ip6-localhost"}:
+        return True
+    try:
+        return ipaddress.ip_address(lowered).is_loopback
+    except ValueError:
+        return False
+
+
+def enforce_write_safety(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    if args.command not in MUTATING_COMMANDS:
+        return
+    if is_loopback_host(args.host):
+        return
+    if args.i_understand_this_writes:
+        return
+    parser.error(
+        f"{args.command} writes Redis keys and is refused for non-loopback host {args.host!r}. "
+        "Use --i-understand-this-writes only for an isolated simulator or explicitly authorized test Redis."
+    )
+
+
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+    enforce_write_safety(args, parser)
     client = RedisClient(args.host, args.port)
 
     if args.command == "defaults":

@@ -244,7 +244,7 @@ class MainActivity : Activity() {
             panel.addView(TextView(this).apply {
                 text = category.questions.joinToString("\n") { question ->
                     val caveat = question.caveat?.let { "（$it）" }.orEmpty()
-                    "• ${question.phrase}：${question.answerScope}$caveat"
+                    "• [${question.level.label}] ${question.phrase}：${question.answerScope}$caveat"
                 }
                 textSize = 13f
                 setLineSpacing(dp(2).toFloat(), 1.0f)

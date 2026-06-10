@@ -165,9 +165,9 @@ object VehicleSnapshotStateMapper {
     ).ifEmpty { listOf("暂无基础车况") }.joinToString("，")
 
     private fun warningSummary(state: Map<String, String>): String = listOfNotNull(
-        state["vehicle.warning_summary"],
-        state["vehicle.l2.summary"]?.let { "L2：$it" },
-        state["vehicle.tire.alarm_summary"]?.let { "胎压：$it" },
+        state["vehicle.warning_summary"]?.let { "DCU旧映射待确认：$it" },
+        state["vehicle.l2.summary"]?.let { "L2旧映射待确认：$it" },
+        state["vehicle.tire.alarm_summary"]?.let { "胎压待实车确认：$it" },
         state["vehicle.perception.fault_summary"]?.let { "感知：$it" }
     ).ifEmpty { listOf("暂无告警信息") }.joinToString("；")
 
@@ -184,6 +184,9 @@ object VehicleSnapshotStateMapper {
         if (value % 1.0 == 0.0) String.format(java.util.Locale.US, "%.0f", value) else threeDecimals(value)
 
     private fun timestampOnlyKeys(snapshot: VehicleReadOnlySnapshot): List<String> = listOfNotNull(
+        snapshot.keyStatuses[VehicleRedisKeys.SPEED]
+            ?.takeIf { it.present && !it.decoded && it.error?.contains("timestamp_only") == true }
+            ?.let { VehicleRedisKeys.SPEED },
         snapshot.trafficLight?.takeIf { !it.hasBusinessData && it.timestamp != null }?.let { VehicleRedisKeys.TRAFFIC_LIGHTS },
         snapshot.laneStatus?.takeIf { !it.hasBusinessData && it.timestamp != null }?.let { VehicleRedisKeys.LANES }
     )

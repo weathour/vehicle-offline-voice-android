@@ -24,7 +24,9 @@ class AskableVoiceContentTest {
 
         assertTrue(titles.contains("定位、感知与轨迹"))
         assertTrue(titles.contains("Redis 数据诊断"))
+        assertTrue(titles.contains("暂缓或降级问答"))
         assertEquals("本轮不启用", AskableVoiceContent.categories.last().title)
         assertTrue(AskableVoiceContent.visiblePhraseList.contains("打开空调等控制写入"))
+        assertFalse(AskableVoiceContent.stableQuestions.any { it.phrase == "ACC 状态" })
     }
 }

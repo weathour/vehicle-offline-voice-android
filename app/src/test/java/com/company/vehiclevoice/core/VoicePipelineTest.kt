@@ -77,6 +77,45 @@ class VoicePipelineTest {
     }
 
     @Test
+    fun readOnlyRealVehicleMode_rejectsActionableControlBeforeMutationOrUnityAction() {
+        val store = MockRedisStore()
+        val tts = MockTtsEngine()
+        val unitySink = RecordingUnityEventSink()
+        val logSink = RecordingEventLogSink()
+        val result = pipeline(
+            asrText = "打开空调",
+            wakeSequences = setOf(1L),
+            store = store,
+            tts = tts,
+            unitySink = unitySink,
+            logSink = logSink,
+            allowVehicleControlActions = false
+        ).runUntilSourceEnds()
+
+        assertEquals("air_conditioner_on", result.intentName)
+        assertNull(result.unityJson)
+        assertTrue(unitySink.events().isEmpty())
+        assertTrue(store.snapshot().isEmpty())
+        assertTrue(result.reply!!.contains("实车只读模式"))
+        assertTrue(tts.spokenTexts().single().contains("已拒绝执行车控指令"))
+        assertTrue(logSink.lines().any { it.contains("Vehicle control action rejected") })
+    }
+
+    @Test
+    fun previewMode_stillAllowsMockActionPipeline() {
+        val store = MockRedisStore()
+        val result = pipeline(
+            asrText = "打开空调",
+            wakeSequences = setOf(1L),
+            store = store,
+            allowVehicleControlActions = true
+        ).runUntilSourceEnds()
+
+        assertEquals("on", store.get("air_conditioner"))
+        assertTrue(result.unityJson!!.contains("air_conditioner_on"))
+    }
+
+    @Test
     fun pipelinePassesVadPreRollFramesToAsr() {
         val asr = CapturingAsrEngine("打开空调")
         val store = MockRedisStore()
@@ -115,7 +154,8 @@ class VoicePipelineTest {
         store: MockRedisStore = MockRedisStore(),
         tts: MockTtsEngine = MockTtsEngine(),
         unitySink: RecordingUnityEventSink = RecordingUnityEventSink(),
-        logSink: RecordingEventLogSink = RecordingEventLogSink()
+        logSink: RecordingEventLogSink = RecordingEventLogSink(),
+        allowVehicleControlActions: Boolean = true
     ): VoicePipeline {
         val frames = listOf(
             PcmFrame.silence(sequence = 0),
@@ -139,7 +179,8 @@ class VoicePipelineTest {
             unityActionMapper = UnityActionMapper(clockMs = { 123L }),
             unityActionJsonEncoder = UnityActionJsonEncoder(),
             unityEventSink = unitySink,
-            logSink = logSink
+            logSink = logSink,
+            allowVehicleControlActions = allowVehicleControlActions
         )
     }
 

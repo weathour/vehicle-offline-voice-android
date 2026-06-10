@@ -1,11 +1,19 @@
 package com.company.vehiclevoice.nlu
 
 object AskableVoiceContent {
+    enum class CapabilityLevel(val label: String) {
+        Stable("稳定"),
+        Caveated("带条件"),
+        Degraded("降级"),
+        Disabled("不启用")
+    }
+
     data class Question(
         val phrase: String,
         val intent: String,
         val answerScope: String,
-        val caveat: String? = null
+        val caveat: String? = null,
+        val level: CapabilityLevel = CapabilityLevel.Stable
     )
 
     data class Category(
@@ -23,11 +31,7 @@ object AskableVoiceContent {
                 Question("当前档位", "vehicle_gear_query", "档位与驻车状态"),
                 Question("电量多少", "vehicle_battery_query", "SOC 百分比"),
                 Question("电池详情", "vehicle_battery_detail_query", "SOC、电压、电流"),
-                Question("还能跑多远", "vehicle_range_query", "DCU_INFO_St 剩余续航"),
-                Question("空调开了吗", "vehicle_ac_query", "空调开关、模式、风量"),
-                Question("当前温度", "vehicle_temperature_query", "车内、车外、空调设定温度"),
-                Question("车门关了吗", "vehicle_door_query", "前门、中门状态"),
-                Question("胎压正常吗", "vehicle_tire_query", "胎压、胎温、报警摘要")
+                Question("还能跑多远", "vehicle_range_query", "DCU_INFO_St 剩余续航")
             )
         ),
         Category(
@@ -46,27 +50,14 @@ object AskableVoiceContent {
             )
         ),
         Category(
-            title = "智驾、告警与接管",
-            description = "解释 L2、ACC、LKA、自动驾驶进入/退出原因和故障告警。",
-            questions = listOf(
-                Question("智能驾驶状态", "vehicle_intelligent_status_query", "驾驶模式、L2 摘要、告警"),
-                Question("ACC 状态", "vehicle_acc_query", "ACC 状态、模式、失败/退出原因"),
-                Question("LKA 状态", "vehicle_lka_query", "LKA 状态、失败/退出原因"),
-                Question("为什么不能进入自动驾驶", "vehicle_autod_limit_query", "限制进入自动驾驶原因"),
-                Question("为什么退出自动驾驶", "vehicle_autod_out_query", "退出自动驾驶原因"),
-                Question("需要接管吗", "vehicle_takeover_query", "接管提醒"),
-                Question("有没有故障", "vehicle_fault_query", "车辆、胎压、感知告警摘要")
-            )
-        ),
-        Category(
             title = "SAM 与协作",
             description = "读取 Sensor_SAM 和已有协作问答，避免把缺失字段说成真实场景。",
             questions = listOf(
-                Question("SAM 状态", "vehicle_sam_status_query", "自动等级、驾驶模式反馈、档位、转向、SAM 车速", "未上报 scene_id 时不判断 V2V/V2I"),
-                Question("当前协作场景是什么", "vehicle_cooperation_scene_query", "协作场景与 V2X 类型"),
-                Question("协作事件开始了吗", "vehicle_cooperation_event_query", "协作事件状态"),
-                Question("有几辆协作车", "vehicle_cooperation_count_query", "协作车辆数量"),
-                Question("引导决策是什么", "vehicle_cooperation_decision_query", "引导决策、反馈结果、协作行为")
+                Question("SAM 状态", "vehicle_sam_status_query", "自动等级、驾驶模式反馈、档位、转向、SAM 车速", "未上报 scene_id 时不判断 V2V/V2I", CapabilityLevel.Caveated),
+                Question("当前协作场景是什么", "vehicle_cooperation_scene_query", "协作场景与 V2X 类型", "scene_id 缺失时只说明证据不足", CapabilityLevel.Caveated),
+                Question("协作事件开始了吗", "vehicle_cooperation_event_query", "协作事件状态", "event 缺失时只说明未可靠读取", CapabilityLevel.Caveated),
+                Question("有几辆协作车", "vehicle_cooperation_count_query", "协作车辆数量", "count 缺失时只说明未可靠读取", CapabilityLevel.Caveated),
+                Question("引导决策是什么", "vehicle_cooperation_decision_query", "引导决策、反馈结果、协作行为", "字段缺失时只说明未可靠读取", CapabilityLevel.Caveated)
             )
         ),
         Category(
@@ -79,19 +70,38 @@ object AskableVoiceContent {
             )
         ),
         Category(
+            title = "暂缓或降级问答",
+            description = "可以问，但本轮只给 schema 待确认或暂未可靠读取的调试回复，不作为稳定能力宣传。",
+            questions = listOf(
+                Question("空调开了吗", "vehicle_ac_query", "空调开关、模式、风量", "本次实车快照缺少 ACM_INF2/ACM_INF4，schema 待确认", CapabilityLevel.Degraded),
+                Question("当前温度", "vehicle_temperature_query", "车内、车外、空调设定温度", "本次实车快照缺少温度业务字段，schema 待确认", CapabilityLevel.Degraded),
+                Question("车门关了吗", "vehicle_door_query", "前门、中门状态", "BC_AutoD_Veh_St 旧字段映射待确认", CapabilityLevel.Degraded),
+                Question("胎压正常吗", "vehicle_tire_query", "胎压、胎温、报警摘要", "本次实车快照缺少 TPMS_INFO", CapabilityLevel.Degraded),
+                Question("智能驾驶状态", "vehicle_intelligent_status_query", "驾驶模式、L2 摘要、告警", "DCU/L2 旧枚举映射待车端 schema 确认", CapabilityLevel.Degraded),
+                Question("ACC 状态", "vehicle_acc_query", "ACC 状态、模式、失败/退出原因", "DCU_L2_St 实车字段含 timestamp，旧 enum 不作稳定结论", CapabilityLevel.Degraded),
+                Question("LKA 状态", "vehicle_lka_query", "LKA 状态、失败/退出原因", "DCU_L2_St schema 待确认", CapabilityLevel.Degraded),
+                Question("为什么不能进入自动驾驶", "vehicle_autod_limit_query", "限制进入自动驾驶原因", "DCU_INFO_2 实车字段与旧解析不一致", CapabilityLevel.Degraded),
+                Question("为什么退出自动驾驶", "vehicle_autod_out_query", "退出自动驾驶原因", "DCU_INFO_2 schema 待确认", CapabilityLevel.Degraded),
+                Question("需要接管吗", "vehicle_takeover_query", "接管提醒", "字段需车端 schema 确认", CapabilityLevel.Degraded),
+                Question("有没有故障", "vehicle_fault_query", "感知故障可读，DCU/L2/胎压部分降级", "会标明 schema 待确认", CapabilityLevel.Degraded)
+            )
+        ),
+        Category(
             title = "本轮不启用",
             description = "实车阶段保持只读，不在主流程引导写车控。",
             questions = listOf(
-                Question("打开空调等控制写入", "deferred_vehicle_write", "不作为实车语音问答入口", "避免误写真实车辆状态"),
-                Question("写 Redis 或改车辆状态", "rejected_external_write", "不支持", "只做读取、解释和诊断"),
-                Question("缺字段时判断真实 V2I/V2V 场景", "deferred_v2x_claim", "不支持", "SAM 未上报 scene_id 时只说明证据不足")
+                Question("打开空调等控制写入", "deferred_vehicle_write", "不作为实车语音问答入口", "避免误写真实车辆状态", CapabilityLevel.Disabled),
+                Question("写 Redis 或改车辆状态", "rejected_external_write", "不支持", "只做读取、解释和诊断", CapabilityLevel.Disabled),
+                Question("缺字段时判断真实 V2I/V2V 场景", "deferred_v2x_claim", "不支持", "SAM 未上报 scene_id 时只说明证据不足", CapabilityLevel.Disabled)
             )
         )
     )
 
     val supportedQuestions: List<Question> = categories
-        .filterNot { it.title == "本轮不启用" }
         .flatMap { it.questions }
+        .filterNot { it.level == CapabilityLevel.Disabled }
+
+    val stableQuestions: List<Question> = supportedQuestions.filter { it.level == CapabilityLevel.Stable }
 
     val visiblePhraseList: List<String> = categories.flatMap { category ->
         category.questions.map { question -> question.phrase }

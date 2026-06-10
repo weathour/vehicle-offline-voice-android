@@ -247,7 +247,13 @@ data class VehicleCooperativeState(
         sceneName,
         eventType,
         collaborativeVehicleCount?.let { "协作车${it}辆" }
-    ).ifEmpty { listOf("无协作场景") }.joinToString("，")
+    ).ifEmpty {
+        listOfNotNull(
+            "SAM已读取，未上报scene_id，不能判断V2V/V2I场景",
+            autoLevel?.let { "自动等级$it" },
+            speedMps?.let { "速度${String.format(java.util.Locale.US, "%.1f", it)}m/s" }
+        )
+    }.joinToString("，")
 }
 
 data class KeyReadStatus(

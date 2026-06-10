@@ -61,7 +61,8 @@ class VoicePipeline(
     private val unityActionJsonEncoder: UnityActionJsonEncoder,
     private val unityEventSink: UnityEventSink,
     private val logSink: EventLogSink,
-    private val readOnlySnapshotProvider: VehicleReadOnlySnapshotProvider? = null
+    private val readOnlySnapshotProvider: VehicleReadOnlySnapshotProvider? = null,
+    private val allowVehicleControlActions: Boolean = true
 ) : AutoCloseable {
     fun runUntilSourceEnds(maxFrames: Int = 2_000): VoicePipelineResult = run(
         VoicePipelineRunConfig(maxFrames = maxFrames)
@@ -237,6 +238,26 @@ class VoicePipeline(
         val parse = intentParser.parse(asr.text)
         logSink.info("NLU intent=${parse.intent.name} reason=${parse.reason}")
         refreshReadOnlyVehicleStateIfNeeded(parse.intent.name)
+        if (parse.isActionable && !allowVehicleControlActions) {
+            val reply = "实车只读模式仅支持查询，已拒绝执行车控指令"
+            logSink.warn("Vehicle control action rejected in read-only mode intent=${parse.intent.name}")
+            try {
+                ttsEngine.speak(reply)
+                logSink.info("TTS reply=$reply")
+            } catch (throwable: Throwable) {
+                logSink.warn("TTS failed after read-only rejection: ${throwable.message}")
+            }
+            return VoicePipelineResult(
+                wakeDetected = true,
+                asrText = asr.text,
+                intentName = parse.intent.name,
+                reply = reply,
+                unityJson = null,
+                stateSnapshot = stateStore.snapshot(),
+                framesRead = frames.size,
+                utterancesHandled = 1
+            )
+        }
         val mutated = stateProjector.apply(parse, stateStore)
         if (!mutated) logSink.info("State not mutated for intent=${parse.intent.name}")
         val reply = replyTemplateEngine.render(parse, stateStore)

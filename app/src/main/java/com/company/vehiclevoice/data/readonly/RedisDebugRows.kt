@@ -344,6 +344,9 @@ object RedisDebugRows {
     }
 
     private fun timestampOnlyKeyList(snapshot: VehicleReadOnlySnapshot): List<String> = listOfNotNull(
+        snapshot.keyStatuses[VehicleRedisKeys.SPEED]
+            ?.takeIf { it.present && !it.decoded && it.error?.contains("timestamp_only") == true }
+            ?.let { VehicleRedisKeys.SPEED },
         snapshot.trafficLight?.takeIf { !it.hasBusinessData && it.timestamp != null }?.let { VehicleRedisKeys.TRAFFIC_LIGHTS },
         snapshot.laneStatus?.takeIf { !it.hasBusinessData && it.timestamp != null }?.let { VehicleRedisKeys.LANES }
     )

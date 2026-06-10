@@ -57,7 +57,7 @@ class RedisVehicleSnapshotProvider(
             }
 
             val value = try {
-                readWithDeadline(key, remaining)
+                readWithDeadline(key, startedAtMs)
             } catch (throwable: Throwable) {
                 statuses[key] = KeyReadStatus(
                     key = key,
@@ -75,8 +75,12 @@ class RedisVehicleSnapshotProvider(
                 when (key) {
                     VehicleRedisKeys.SPEED -> {
                         if (speed == null) {
-                            speed = VehicleInterfaceProto.decodeSpeed(value.payload)
-                            if (speed != null) speedSource = "BC_Veh_Spd"
+                            val decodedSpeed = VehicleInterfaceProto.decodeSpeed(value.payload)
+                            if (decodedSpeed == null) {
+                                error("business_value_missing_or_timestamp_only")
+                            }
+                            speed = decodedSpeed
+                            speedSource = "BC_Veh_Spd"
                         }
                     }
                     VehicleRedisKeys.DCU_INFO_1 -> VehicleInterfaceProto.decodeDcuInfo1(value.payload).also {
@@ -184,8 +188,10 @@ class RedisVehicleSnapshotProvider(
         return snapshotDeadlineMs - (clockMs() - startedAtMs)
     }
 
-    private fun readWithDeadline(key: String, remainingMs: Long): VehicleBinaryValue? {
+    private fun readWithDeadline(key: String, startedAtMs: Long): VehicleBinaryValue? {
         for (candidate in listOf(key) + VehicleRedisKeys.aliases[key].orEmpty()) {
+            val remainingMs = remainingDeadlineMs(startedAtMs)
+            if (remainingMs <= 0L) error("snapshot_deadline_exceeded")
             val value = if (dataSource is SocketRedisBinaryDataSource && remainingMs != Long.MAX_VALUE) {
                 dataSource.read(candidate, timeoutMsOverride = remainingMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
             } else {
