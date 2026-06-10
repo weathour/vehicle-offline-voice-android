@@ -27,6 +27,7 @@ import com.company.vehiclevoice.data.readonly.VehicleDataSourceRuntimeConfig
 import com.company.vehiclevoice.core.VoiceRuntimeMode
 import com.company.vehiclevoice.data.readonly.SocketRedisBinaryDataSource
 import com.company.vehiclevoice.data.readonly.SocketRedisConfig
+import com.company.vehiclevoice.nlu.AskableVoiceContent
 import com.company.vehiclevoice.update.GitHubReleaseUpdateClient
 import com.company.vehiclevoice.update.GitHubReleaseVersion
 import com.company.vehiclevoice.update.UpdateApkProvider
@@ -134,6 +135,7 @@ class MainActivity : Activity() {
 
         connectionPanel = debugLine("连接诊断", "未测试")
         root.addView(connectionPanel)
+        root.addView(buildAskableContentPanel())
         root.addView(buildDebugPanel())
         root.addView(buildDeveloperPanel())
 
@@ -211,6 +213,44 @@ class MainActivity : Activity() {
             text = "手机必须与车辆 Redis 在同一网络。连接测试通过后，再启动语音测试。"
             textSize = 12f
         })
+        return panel
+    }
+
+    private fun buildAskableContentPanel(): LinearLayout {
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 18, 0, 18)
+        }
+        panel.addView(TextView(this).apply {
+            text = "可问内容"
+            textSize = 18f
+            setTypeface(typeface, Typeface.BOLD)
+        })
+        panel.addView(TextView(this).apply {
+            text = "实车主流程只做 Redis 只读问答，缺字段会说明证据不足，不会写车控。"
+            textSize = 13f
+        })
+        AskableVoiceContent.categories.forEach { category ->
+            panel.addView(TextView(this).apply {
+                text = category.title
+                textSize = 15f
+                setTypeface(typeface, Typeface.BOLD)
+                setPadding(0, 12, 0, 2)
+            })
+            panel.addView(TextView(this).apply {
+                text = category.description
+                textSize = 12f
+            })
+            panel.addView(TextView(this).apply {
+                text = category.questions.joinToString("\n") { question ->
+                    val caveat = question.caveat?.let { "（$it）" }.orEmpty()
+                    "• ${question.phrase}：${question.answerScope}$caveat"
+                }
+                textSize = 13f
+                setLineSpacing(dp(2).toFloat(), 1.0f)
+                setTextIsSelectable(true)
+            })
+        }
         return panel
     }
 
