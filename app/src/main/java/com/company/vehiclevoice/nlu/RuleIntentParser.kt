@@ -23,12 +23,24 @@ class RuleIntentParser : IntentParser {
                 action("window_close", "window", "close")
             matchesAny(normalized, "切换场景", "切到场景", "切换模式") ->
                 action("scene_switch", "scene", "switch")
+            matchesAny(normalized, "key诊断", "rediskey诊断", "键值诊断", "缺哪些key", "哪些key没读到", "缺失key", "解码错误") ||
+                (hasAny(normalized, KEY_DIAGNOSTIC_TERMS) && hasAny(normalized, listOf("诊断", "缺失", "缺哪些", "没读到", "错误", "失败", "缺", "异常"))) ->
+                query("vehicle_key_diagnostic_query", "key_diagnostic")
+            matchesAny(normalized, "redis状态", "redis健康", "数据健康", "实车数据健康", "缓存健康", "数据读到了吗", "redis连上了吗") ||
+                (hasAny(normalized, DATA_HEALTH_TERMS) && hasAny(normalized, listOf("健康", "状态", "连接", "连上", "读到", "读取", "正常", "可用", "有没有"))) ->
+                query("vehicle_data_health_query", "data_health")
+            matchesAny(normalized, "数据新鲜度", "redis新鲜度", "时间戳状态", "定位时间戳", "数据多久没更新", "数据新不新") ||
+                (hasAny(normalized, FRESHNESS_TERMS) && hasAny(normalized, listOf("新鲜度", "新不新", "多久", "时间戳", "更新", "刷新", "当前", "现在", "状态"))) ->
+                query("vehicle_data_freshness_query", "data_freshness")
             matchesAny(normalized, "当前车速", "车速多少", "速度多少", "速度怎样", "现在速度", "跑多快") ||
                 topicQuery(normalized, SPEED_TERMS, listOf("多少", "多快", "当前", "现在", "怎样", "怎么样")) ->
                 query("vehicle_speed_query", "speed")
             matchesAny(normalized, "当前档位", "什么档位", "现在档位", "挂的什么档", "当前单位", "什么单位", "现在单位") ||
                 topicQuery(normalized, GEAR_TERMS, listOf("什么", "当前", "现在", "多少", "挂", "状态")) ->
                 query("vehicle_gear_query", "gear")
+            matchesAny(normalized, "电池详情", "电池电压", "电池电流", "电压多少", "电流多少", "soc电压") ||
+                topicQuery(normalized, BATTERY_DETAIL_TERMS, listOf("详情", "电压", "电流", "多少", "当前", "现在", "状态")) ->
+                query("vehicle_battery_detail_query", "battery_detail")
             matchesAny(normalized, "电量多少", "还有多少电", "电池电量", "soc多少", "soc") ||
                 topicQuery(normalized, BATTERY_TERMS, listOf("多少", "当前", "现在", "还有", "剩", "状态")) ->
                 query("vehicle_battery_query", "battery")
@@ -44,12 +56,30 @@ class RuleIntentParser : IntentParser {
             matchesAny(normalized, "车门关了吗", "车门是否关闭", "门关了吗", "前门状态", "中门状态") ||
                 topicQuery(normalized, DOOR_TERMS, listOf("关", "开", "状态", "是否", "当前", "现在", "吗")) ->
                 query("vehicle_door_query", "door")
+            matchesAny(normalized, "rtk状态", "rtk标志", "rtkflag", "定位rtk", "rtk好了吗") ||
+                topicQuery(normalized, RTK_TERMS, listOf("状态", "标志", "flag", "当前", "现在", "好", "正常", "多少")) ->
+                query("vehicle_rtk_query", "rtk")
+            matchesAny(normalized, "车辆姿态", "车身姿态", "姿态多少", "俯仰横滚", "航向角", "高度多少") ||
+                topicQuery(normalized, POSE_TERMS, listOf("多少", "当前", "现在", "姿态", "高度", "角", "状态")) ->
+                query("vehicle_pose_query", "pose")
             matchesAny(normalized, "当前位置", "定位在哪", "现在位置", "航向多少") ||
                 topicQuery(normalized, LOCATION_TERMS, listOf("哪", "哪里", "当前", "现在", "多少", "状态")) ->
                 query("vehicle_location_query", "location")
+            matchesAny(normalized, "几个障碍物", "障碍物数量", "障碍物个数", "有多少障碍物", "目标数量") ||
+                (hasAny(normalized, OBSTACLE_TERMS) && hasAny(normalized, listOf("几个", "多少个", "数量", "个数", "几辆", "多少辆"))) ->
+                query("vehicle_obstacle_count_query", "obstacle_count")
+            matchesAny(normalized, "最近障碍物", "最近目标", "最近的障碍物", "最近的目标", "最近障碍物距离") ||
+                (hasAny(normalized, OBSTACLE_TERMS) && hasAny(normalized, listOf("最近", "最近的", "距离", "离我最近"))) ->
+                query("vehicle_nearest_obstacle_query", "nearest_obstacle")
             matchesAny(normalized, "前方有没有障碍物", "有没有障碍物", "最近障碍物", "前方目标") ||
                 topicQuery(normalized, OBSTACLE_TERMS, listOf("有没有", "有", "前方", "最近", "目标", "状态")) ->
                 query("vehicle_obstacle_query", "obstacle")
+            matchesAny(normalized, "规划轨迹", "轨迹点", "轨迹长度", "当前轨迹", "计划轨迹", "轨迹有多少点") ||
+                topicQuery(normalized, TRAJECTORY_TERMS, listOf("多少", "几个", "点", "长度", "当前", "现在", "状态", "规划", "计划")) ->
+                query("vehicle_trajectory_query", "trajectory")
+            matchesAny(normalized, "车道线", "车道线状态", "车道线数量", "感知车道线", "车道线置信度") ||
+                topicQuery(normalized, LANE_TERMS, listOf("状态", "数量", "多少", "几条", "置信度", "当前", "现在", "有没有")) ->
+                query("vehicle_lane_query", "lane")
             matchesAny(normalized, "红绿灯", "交通灯", "信号灯") ||
                 topicQuery(normalized, TRAFFIC_LIGHT_TERMS, listOf("什么", "当前", "现在", "颜色", "状态", "红", "绿", "灯")) ->
                 query("vehicle_traffic_light_query", "traffic_light")
@@ -77,6 +107,9 @@ class RuleIntentParser : IntentParser {
             matchesAny(normalized, "有故障吗", "有没有故障", "当前故障", "车辆告警", "有什么告警", "有没有告警", "急停了吗") ||
                 topicQuery(normalized, FAULT_TERMS, listOf("有", "有没有", "什么", "当前", "现在", "吗", "状态")) ->
                 query("vehicle_fault_query", "fault")
+            matchesAny(normalized, "sam状态", "sam反馈", "sam实车状态", "sensor_sam状态", "协作模块状态", "实车协作状态") ||
+                topicQuery(normalized, SAM_TERMS, listOf("状态", "反馈", "实车", "当前", "现在", "模式", "车速", "转向", "档位")) ->
+                query("vehicle_sam_status_query", "sam_status")
             matchesAny(
                 normalized,
                 "当前协作场景",
@@ -277,19 +310,56 @@ class RuleIntentParser : IntentParser {
             "v二x" to "v2x",
             "v突v" to "v2v",
             "v突i" to "v2i",
-            "v突x" to "v2x"
+            "v突x" to "v2x",
+            // Real-vehicle Redis/protobuf debug terms. These improve recognition after ASR
+            // without making the parser execute any write/control action.
+            "瑞迪斯" to "redis",
+            "瑞迪思" to "redis",
+            "瑞蒂斯" to "redis",
+            "瑞的斯" to "redis",
+            "阿提开" to "rtk",
+            "二踢开" to "rtk",
+            "二梯开" to "rtk",
+            "二提开" to "rtk",
+            "啊踢开" to "rtk",
+            "阿踢开" to "rtk",
+            "三姆" to "sam",
+            "山姆" to "sam",
+            "萨姆" to "sam",
+            "森萨姆" to "sensorsam",
+            "归迹" to "轨迹",
+            "规迹" to "轨迹",
+            "轨机" to "轨迹",
+            "诡计" to "轨迹",
+            "车到线" to "车道线",
+            "车道限" to "车道线",
+            "车到限" to "车道线",
+            "新鲜读" to "新鲜度",
+            "心鲜度" to "新鲜度",
+            "新先度" to "新鲜度",
+            "时间错" to "时间戳",
+            "时间窗" to "时间戳",
+            "卡存" to "缓存",
+            "缓冲" to "缓存",
+            "建诊断" to "键诊断",
+            "健诊断" to "键诊断"
         )
 
         private val COMMON_QUERY_TERMS = listOf("当前", "现在", "多少", "什么", "怎样", "怎么样", "状态", "有没有", "是否", "吗", "正常", "原因", "哪", "哪里")
         private val SPEED_TERMS = listOf("车速", "速度", "时速", "跑多快")
         private val GEAR_TERMS = listOf("档位", "档", "单位")
         private val BATTERY_TERMS = listOf("电量", "电池", "soc", "电")
+        private val BATTERY_DETAIL_TERMS = listOf("电池", "电压", "电流", "soc")
         private val RANGE_TERMS = listOf("剩余里程", "里程", "续航", "还能跑", "可跑")
         private val AC_TERMS = listOf("空调", "风机", "制冷", "制热")
         private val TEMPERATURE_TERMS = listOf("温度", "车内", "车外", "设定")
         private val DOOR_TERMS = listOf("车门", "前门", "中门", "门")
         private val LOCATION_TERMS = listOf("位置", "定位", "经度", "纬度", "航向")
+        private val RTK_TERMS = listOf("rtk", "rtkflag", "定位标志", "定位质量")
+        private val POSE_TERMS = listOf("姿态", "俯仰", "横滚", "航向角", "高度", "pitch", "roll", "heading")
         private val OBSTACLE_TERMS = listOf("障碍物", "障碍", "目标", "前方目标")
+        private val TRAJECTORY_TERMS = listOf("规划轨迹", "计划轨迹", "轨迹", "轨迹点", "plannedtrajectory")
+        private val LANE_TERMS = listOf("车道线", "车道列表", "车道", "lane")
         private val TRAFFIC_LIGHT_TERMS = listOf("红绿灯", "交通灯", "信号灯", "灯色")
         private val TIRE_TERMS = listOf("胎压", "轮胎", "胎")
         private val INTELLIGENT_DRIVING_TERMS = listOf("智能驾驶", "自动驾驶", "辅助驾驶", "智驾", "l2")
@@ -299,9 +369,13 @@ class RuleIntentParser : IntentParser {
         private val TAKEOVER_TERMS = listOf("接管", "接管提醒")
         private val FAULT_TERMS = listOf("故障", "告警", "报警", "急停", "异常")
         private val COOPERATION_TERMS = listOf("协作", "v2v", "v2i", "v2x")
+        private val SAM_TERMS = listOf("sam", "sensorsam", "协作模块", "实车协作")
         private val SCENE_TERMS = listOf("场景", "类型")
         private val EVENT_TERMS = listOf("事件", "时间", "状态")
         private val DECISION_TERMS = listOf("引导", "决策", "反馈", "结果", "行为")
+        private val DATA_HEALTH_TERMS = listOf("redis", "缓存", "数据源", "实车数据", "快照", "读数", "读取状态")
+        private val FRESHNESS_TERMS = listOf("新鲜度", "时间戳", "timestamp", "更新", "刷新", "多久没更新")
+        private val KEY_DIAGNOSTIC_TERMS = listOf("key", "键", "键值", "缺失键", "解码", "诊断")
         private val VEHICLE_STATUS_TERMS = listOf("车辆状态", "车况", "整车状态")
 
         private val UNSAFE_TOKENS = listOf(
