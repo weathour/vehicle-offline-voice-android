@@ -7,6 +7,7 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.TextUtils
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
@@ -76,8 +77,8 @@ class RedisDebugActivity : Activity() {
             setPadding(0, dp(4), 0, dp(12))
         })
 
-        endpointPanel = panelText("数据源：未读取")
-        summaryPanel = panelText("刷新状态：等待首次读取")
+        endpointPanel = panelText("数据源：未读取", fixedHeightDp = 60)
+        summaryPanel = panelText("刷新状态：等待首次读取", fixedHeightDp = 60)
         root.addView(endpointPanel)
         root.addView(summaryPanel)
 
@@ -102,13 +103,20 @@ class RedisDebugActivity : Activity() {
         return page
     }
 
-    private fun panelText(initial: String): TextView = TextView(this).apply {
+    private fun panelText(initial: String, fixedHeightDp: Int): TextView = TextView(this).apply {
         text = initial
         textSize = 14f
         setTextColor(Color.rgb(15, 23, 42))
         setTextIsSelectable(true)
         setPadding(dp(12), dp(8), dp(12), dp(8))
         setBackgroundColor(Color.WHITE)
+        minLines = 2
+        maxLines = 2
+        ellipsize = TextUtils.TruncateAt.END
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            dp(fixedHeightDp)
+        ).apply { setMargins(0, 0, 0, dp(6)) }
     }
 
     private fun sectionTitle(title: String): TextView = TextView(this).apply {
