@@ -119,6 +119,15 @@ class MainActivity : Activity() {
         })
 
         root.addView(Button(this).apply {
+            text = "Redis 调试页面（1Hz 对比）"
+            setOnClickListener {
+                remoteRedisCheckBox.isChecked = true
+                saveRedisConfig()
+                startActivity(Intent(this@MainActivity, RedisDebugActivity::class.java))
+            }
+        })
+
+        root.addView(Button(this).apply {
             text = "停止语音服务"
             setOnClickListener { stopVoiceService() }
         })
