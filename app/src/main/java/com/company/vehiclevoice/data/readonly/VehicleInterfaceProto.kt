@@ -35,7 +35,7 @@ internal object VehicleInterfaceProto {
         Battery(
             voltage = fields.lastFloat(2) ?: fields.lastFloat(1),
             current = fields.lastFloat(3),
-            socPercent = fields.lastFloat(4) ?: fields.lastFloat(3)
+            socPercent = fields.lastFloat(4)
         )
     }
 

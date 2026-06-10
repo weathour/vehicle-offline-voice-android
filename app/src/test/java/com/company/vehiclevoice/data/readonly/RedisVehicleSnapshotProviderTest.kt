@@ -115,6 +115,30 @@ class RedisVehicleSnapshotProviderTest {
     }
 
     @Test
+    fun batteryWithoutSocFieldDoesNotReportCurrentAsSoc() {
+        val source = SimulatedRedisBinaryDataSource(
+            mapOf(
+                VehicleRedisKeys.BATTERY to ProtoWire.build {
+                    double(1, 1_717_820_800.0)
+                    float(2, 612.0f)
+                    float(3, 8.5f)
+                }
+            ),
+            clockMs = { 2L }
+        )
+
+        val snapshot = RedisVehicleSnapshotProvider(source, keys = listOf(VehicleRedisKeys.BATTERY)).readSnapshot()
+        val map = VehicleSnapshotStateMapper.toStateMap(snapshot)
+
+        assertEquals(612.0f, snapshot.batteryVoltageVolts!!, 0.01f)
+        assertEquals(8.5f, snapshot.batteryCurrentAmps!!, 0.01f)
+        assertEquals(null, snapshot.batterySocPercent)
+        assertEquals("612.0", map["vehicle.battery_voltage_v"])
+        assertEquals("8.5", map["vehicle.battery_current_a"])
+        assertFalse(map.containsKey("vehicle.battery_soc_percent"))
+    }
+
+    @Test
     fun warningFixtures_decodeHumanReadableGroupBFields() {
         val source = SimulatedRedisBinaryDataSource(
             mapOf(

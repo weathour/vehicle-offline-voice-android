@@ -335,7 +335,9 @@ class ReplyTemplateEngine {
     }
 
     private fun renderCooperationScene(store: VehicleStateStore): String {
-        val scene = store.get("vehicle.cooperation.scene") ?: return "暂未读取到协作场景"
+        val scene = store.get("vehicle.cooperation.scene") ?: return store.get("vehicle.cooperation.summary")
+            ?.takeIf { it.contains("未上报scene_id") || it.contains("不能判断V2V/V2I") }
+            ?: "SAM 已读取但未上报 scene_id 时不能判断 V2V/V2I 场景；本轮暂未可靠读取协作场景"
         val type = store.get("vehicle.cooperation.v2x_type")
         return if (type == null) "当前协作场景：$scene" else "当前协作场景：$scene，类型$type"
     }

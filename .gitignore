@@ -13,3 +13,5 @@ captures/
 .omx/
 .agents/
 .codex/agents/
+__pycache__/
+*.pyc
