@@ -19,6 +19,10 @@ object RedisDebugRows {
             readableStatus = statusFor(snapshot, keys),
             readableContent = content.ifBlank { "暂无可读内容" }
         )
+        fun schemaDebugContent(content: String, reason: String): String {
+            val prefix = "$reason，schema 待车端确认，仅调试参考"
+            return content.ifBlank { null }?.let { "$prefix：$it" } ?: "$prefix，暂未可靠读取"
+        }
 
         return listOf(
             row(
@@ -71,39 +75,39 @@ object RedisDebugRows {
             ),
             row("剩余里程 / 续航", listOf(VehicleRedisKeys.RANGE), v("vehicle.remaining_range_km")?.let { "$it km" }.orEmpty()),
             row(
-                "空调状态",
+                "空调状态（schema 待确认）",
                 listOf(VehicleRedisKeys.AC_STATE),
-                listOfNotNull(
+                schemaDebugContent(listOfNotNull(
                     v("vehicle.ac_power")?.let { "电源$it" },
                     v("vehicle.ac_mode")?.let { "模式$it" },
                     v("vehicle.ac_fan_gear")?.let { "风机${it}档" },
                     v("vehicle.ac_set_temp_c")?.let { "设定${it}℃" }
-                ).joinToString("，")
+                ).joinToString("，"), "ACM_INF4 旧字段映射待确认")
             ),
             row(
-                "温度信息",
+                "温度信息（schema 待确认）",
                 listOf(VehicleRedisKeys.AC_TEMPERATURE, VehicleRedisKeys.AC_STATE),
-                listOfNotNull(
+                schemaDebugContent(listOfNotNull(
                     v("vehicle.in_car_temp_c")?.let { "车内${it}℃" },
                     v("vehicle.out_car_temp_c")?.let { "车外${it}℃" },
                     v("vehicle.ac_set_temp_c")?.let { "空调设定${it}℃" }
-                ).joinToString("，")
+                ).joinToString("，"), "ACM_INF2/ACM_INF4 温度字段待确认")
             ),
             row(
-                "车门状态",
+                "车门状态（schema 待确认）",
                 listOf(VehicleRedisKeys.BODY_STATE),
-                listOfNotNull(
+                schemaDebugContent(listOfNotNull(
                     v("vehicle.front_door")?.let { "前门$it" },
                     v("vehicle.mid_door")?.let { "中门$it" }
-                ).joinToString("，")
+                ).joinToString("，"), "BC_AutoD_Veh_St 车门旧映射待确认")
             ),
             row(
-                "车身扩展状态 / 喇叭 / 雨刮",
+                "车身扩展状态 / 喇叭 / 雨刮（schema 待确认）",
                 listOf(VehicleRedisKeys.BODY_STATE),
-                listOfNotNull(
+                schemaDebugContent(listOfNotNull(
                     v("vehicle.horn")?.let { "喇叭$it" },
                     v("vehicle.wiper")?.let { "雨刮$it" }
-                ).joinToString("，")
+                ).joinToString("，"), "BC_AutoD_Veh_St 车身旧映射待确认")
             ),
             row(
                 "位置 / 经纬度 / 航向 / RTK",
@@ -185,48 +189,66 @@ object RedisDebugRows {
                 ).joinToString("，")
             ),
             row(
-                "胎压 / 轮胎状态",
+                "胎压 / 轮胎状态（schema 待确认）",
                 listOf(VehicleRedisKeys.TPMS),
-                listOfNotNull(
+                schemaDebugContent(listOfNotNull(
                     v("vehicle.tire.normal")?.let { "正常=$it" },
                     v("vehicle.tire.alarm_summary")?.let { "告警$it" },
                     v("vehicle.tire.pressure_kpa")?.let { "压力${it}kPa" },
                     v("vehicle.tire.temperature_c")?.let { "温度${it}℃" }
-                ).joinToString("，")
+                ).joinToString("，"), "TPMS_INFO 本轮实车业务字段待确认")
             ),
             row(
-                "智能驾驶 / 自动驾驶状态",
+                "智能驾驶 / 自动驾驶状态（schema 待确认）",
                 listOf(VehicleRedisKeys.DCU_INFO_2, VehicleRedisKeys.L2_STATE),
-                listOfNotNull(v("vehicle.drive_mode")?.let { "驾驶模式$it" }, v("vehicle.l2.summary"))
-                    .joinToString("，")
+                schemaDebugContent(
+                    listOfNotNull(v("vehicle.drive_mode")?.let { "驾驶模式$it" }, v("vehicle.l2.summary"))
+                        .joinToString("，"),
+                    "DCU_INFO_2/DCU_L2_St 旧枚举映射待确认"
+                )
             ),
             row(
-                "ACC 状态",
+                "ACC 状态（schema 待确认）",
                 listOf(VehicleRedisKeys.L2_STATE),
-                listOfNotNull(
+                schemaDebugContent(listOfNotNull(
                     v("vehicle.acc.status")?.let { "ACC$it" },
                     v("vehicle.acc.mode")?.let { "模式$it" },
                     v("vehicle.acc.fail_reason")?.let { "启动失败$it" },
                     v("vehicle.acc.quit_reason")?.let { "退出原因$it" }
-                ).joinToString("，")
+                ).joinToString("，"), "DCU_L2_St ACC 旧枚举映射待确认")
             ),
             row(
-                "LKA 状态",
+                "LKA 状态（schema 待确认）",
                 listOf(VehicleRedisKeys.L2_STATE),
-                listOfNotNull(
+                schemaDebugContent(listOfNotNull(
                     v("vehicle.lka.status")?.let { "LKA$it" },
                     v("vehicle.lka.fail_reason")?.let { "启动失败$it" },
                     v("vehicle.lka.quit_reason")?.let { "退出原因$it" }
-                ).joinToString("，")
+                ).joinToString("，"), "DCU_L2_St LKA 旧枚举映射待确认")
             ),
-            row("不能进入自动驾驶原因", listOf(VehicleRedisKeys.DCU_INFO_2), v("vehicle.autod.limit_reason").orEmpty()),
-            row("退出自动驾驶原因", listOf(VehicleRedisKeys.DCU_INFO_2), v("vehicle.autod.out_reason").orEmpty()),
-            row("接管提醒", listOf(VehicleRedisKeys.DCU_INFO_2), v("vehicle.takeover_request").orEmpty()),
             row(
-                "故障 / 告警摘要",
+                "不能进入自动驾驶原因（schema 待确认）",
+                listOf(VehicleRedisKeys.DCU_INFO_2),
+                schemaDebugContent(v("vehicle.autod.limit_reason").orEmpty(), "DCU_INFO_2 限制原因旧映射待确认")
+            ),
+            row(
+                "退出自动驾驶原因（schema 待确认）",
+                listOf(VehicleRedisKeys.DCU_INFO_2),
+                schemaDebugContent(v("vehicle.autod.out_reason").orEmpty(), "DCU_INFO_2 退出原因旧映射待确认")
+            ),
+            row(
+                "接管提醒（schema 待确认）",
+                listOf(VehicleRedisKeys.DCU_INFO_2),
+                schemaDebugContent(v("vehicle.takeover_request").orEmpty(), "DCU_INFO_2 接管提醒旧映射待确认")
+            ),
+            row(
+                "故障 / 告警摘要（部分 schema 待确认）",
                 listOf(VehicleRedisKeys.DCU_INFO_2, VehicleRedisKeys.TPMS, VehicleRedisKeys.MAIN_OBSTACLE),
-                listOfNotNull(v("vehicle.warning_summary"), v("vehicle.tire.alarm_summary")?.let { "胎压$it" }, v("vehicle.perception.fault_summary")?.let { "感知$it" })
-                    .joinToString("；")
+                schemaDebugContent(
+                    listOfNotNull(v("vehicle.warning_summary"), v("vehicle.tire.alarm_summary")?.let { "胎压$it" }, v("vehicle.perception.fault_summary")?.let { "感知$it" })
+                        .joinToString("；"),
+                    "DCU_INFO_2/TPMS 告警旧映射部分待确认"
+                )
             ),
             row(
                 "感知故障详情",
