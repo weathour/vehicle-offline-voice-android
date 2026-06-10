@@ -1,0 +1,7 @@
+.gitattributes text eol=lf
+app/src/main/assets/model-cn/** -text
+docs/interface-ingest/**/*.proto text eol=lf
+docs/interface-ingest/**/*.md text eol=lf
+docs/interface-ingest/**/*.json text eol=lf
+docs/interface-ingest/**/*.jsonl text eol=lf
+docs/interface-ingest/**/SHA256SUMS text eol=lf

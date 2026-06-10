@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+message Pt {
+    double x = 1;
+    double y = 2;
+}
+
+message Line {
+    int32 lane_type = 1;
+    int32 pts_vehicle_num = 2;
+    repeated Pt pts_vehicle = 3;
+    int32 pts_abs_num = 4;
+    repeated Pt pts_abs = 5;
+    double confidence = 6;
+}
+
+message LaneList {
+    double timestamp = 1;
+    int32 lane_num = 2;
+    repeated Line laneline = 3;
+}

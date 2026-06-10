@@ -1,0 +1,341 @@
+{
+  "redis": {
+    "host": "192.168.2.112",
+    "port": 6379
+  },
+  "capture": {
+    "samples_requested": 60,
+    "samples_written": 60,
+    "interval_seconds": 1.0,
+    "started_at_utc": "2026-06-10T06:27:23.067020+00:00",
+    "ended_at_utc": "2026-06-10T06:28:50.760273+00:00",
+    "raw_jsonl": "docs/interface-ingest/2026-06-10-live-redis-capture/redis-capture-60samples-1hz-values.jsonl",
+    "summary_json": "docs/interface-ingest/2026-06-10-live-redis-capture/redis-capture-60samples-values-summary.json"
+  },
+  "key_count_min": 30,
+  "key_count_max": 30,
+  "observed_keys": [
+    "AS_Drive_and_Brk_Sys_Ctrl",
+    "AS_State_FB_Req",
+    "AS_State_FB_Req2",
+    "AS_Strg_Ctrl",
+    "BC_AutoD_Veh_St",
+    "BC_Intelligent_Ctrl_St",
+    "BC_Veh_Mileage",
+    "BC_Veh_Spd",
+    "DCU_Battery_St",
+    "DCU_Drive_St",
+    "DCU_INFO_1",
+    "DCU_INFO_2",
+    "DCU_INFO_St",
+    "DCU_L2_St",
+    "Day2_BSM_Msg",
+    "Day2_MAP_Msg",
+    "Day2_RSI_Msg",
+    "Day2_RSM_Msg",
+    "Day2_SPAT_Msg",
+    "Day2_SSM_Msg",
+    "Day2_VIR_Msg",
+    "Rel_SpeedSteer",
+    "Sensor_Lanelist",
+    "Sensor_Location",
+    "Sensor_Mmobstacles",
+    "Sensor_SAM",
+    "Sensor_TrafficLightlist",
+    "Strg_StrgSys_St",
+    "VIN_INFO",
+    "planned_trajectory"
+  ],
+  "string_keys_with_value_changes": [
+    "AS_Drive_and_Brk_Sys_Ctrl",
+    "AS_State_FB_Req",
+    "AS_State_FB_Req2",
+    "AS_Strg_Ctrl",
+    "BC_AutoD_Veh_St",
+    "BC_Intelligent_Ctrl_St",
+    "BC_Veh_Mileage",
+    "BC_Veh_Spd",
+    "DCU_Battery_St",
+    "DCU_Drive_St",
+    "DCU_INFO_1",
+    "DCU_INFO_2",
+    "DCU_INFO_St",
+    "DCU_L2_St",
+    "Rel_SpeedSteer",
+    "Strg_StrgSys_St",
+    "VIN_INFO"
+  ],
+  "string_value_lengths_seen": {
+    "AS_Drive_and_Brk_Sys_Ctrl": [
+      22
+    ],
+    "AS_State_FB_Req": [
+      9
+    ],
+    "AS_State_FB_Req2": [
+      9
+    ],
+    "AS_Strg_Ctrl": [
+      20
+    ],
+    "BC_AutoD_Veh_St": [
+      20
+    ],
+    "BC_Intelligent_Ctrl_St": [
+      21
+    ],
+    "BC_Veh_Mileage": [
+      19
+    ],
+    "BC_Veh_Spd": [
+      9
+    ],
+    "DCU_Battery_St": [
+      24
+    ],
+    "DCU_Drive_St": [
+      11
+    ],
+    "DCU_INFO_1": [
+      17
+    ],
+    "DCU_INFO_2": [
+      17
+    ],
+    "DCU_INFO_St": [
+      14
+    ],
+    "DCU_L2_St": [
+      19
+    ],
+    "Day2_BSM_Msg": [
+      120
+    ],
+    "Day2_MAP_Msg": [
+      2815
+    ],
+    "Day2_RSI_Msg": [
+      773
+    ],
+    "Day2_RSM_Msg": [
+      249
+    ],
+    "Day2_SPAT_Msg": [
+      962
+    ],
+    "Day2_SSM_Msg": [
+      533
+    ],
+    "Day2_VIR_Msg": [
+      57
+    ],
+    "Rel_SpeedSteer": [
+      19
+    ],
+    "Sensor_Lanelist": [
+      9
+    ],
+    "Sensor_Location": [
+      228
+    ],
+    "Sensor_Mmobstacles": [
+      3127
+    ],
+    "Sensor_SAM": [
+      45
+    ],
+    "Sensor_TrafficLightlist": [
+      9
+    ],
+    "Strg_StrgSys_St": [
+      26,
+      28
+    ],
+    "VIN_INFO": [
+      31,
+      32
+    ],
+    "planned_trajectory": [
+      840
+    ]
+  },
+  "first_last_value_lengths": {
+    "AS_Drive_and_Brk_Sys_Ctrl": {
+      "first_len": 22,
+      "last_len": 22
+    },
+    "AS_State_FB_Req": {
+      "first_len": 9,
+      "last_len": 9
+    },
+    "AS_State_FB_Req2": {
+      "first_len": 9,
+      "last_len": 9
+    },
+    "AS_Strg_Ctrl": {
+      "first_len": 20,
+      "last_len": 20
+    },
+    "BC_AutoD_Veh_St": {
+      "first_len": 20,
+      "last_len": 20
+    },
+    "BC_Intelligent_Ctrl_St": {
+      "first_len": 21,
+      "last_len": 21
+    },
+    "BC_Veh_Mileage": {
+      "first_len": 19,
+      "last_len": 19
+    },
+    "BC_Veh_Spd": {
+      "first_len": 9,
+      "last_len": 9
+    },
+    "DCU_Battery_St": {
+      "first_len": 24,
+      "last_len": 24
+    },
+    "DCU_Drive_St": {
+      "first_len": 11,
+      "last_len": 11
+    },
+    "DCU_INFO_1": {
+      "first_len": 17,
+      "last_len": 17
+    },
+    "DCU_INFO_2": {
+      "first_len": 17,
+      "last_len": 17
+    },
+    "DCU_INFO_St": {
+      "first_len": 14,
+      "last_len": 14
+    },
+    "DCU_L2_St": {
+      "first_len": 19,
+      "last_len": 19
+    },
+    "Day2_BSM_Msg": {
+      "first_len": 120,
+      "last_len": 120
+    },
+    "Day2_MAP_Msg": {
+      "first_len": 2815,
+      "last_len": 2815
+    },
+    "Day2_RSI_Msg": {
+      "first_len": 773,
+      "last_len": 773
+    },
+    "Day2_RSM_Msg": {
+      "first_len": 249,
+      "last_len": 249
+    },
+    "Day2_SPAT_Msg": {
+      "first_len": 962,
+      "last_len": 962
+    },
+    "Day2_SSM_Msg": {
+      "first_len": 533,
+      "last_len": 533
+    },
+    "Day2_VIR_Msg": {
+      "first_len": 57,
+      "last_len": 57
+    },
+    "Rel_SpeedSteer": {
+      "first_len": 19,
+      "last_len": 19
+    },
+    "Sensor_Lanelist": {
+      "first_len": 9,
+      "last_len": 9
+    },
+    "Sensor_Location": {
+      "first_len": 228,
+      "last_len": 228
+    },
+    "Sensor_Mmobstacles": {
+      "first_len": 3127,
+      "last_len": 3127
+    },
+    "Sensor_SAM": {
+      "first_len": 45,
+      "last_len": 45
+    },
+    "Sensor_TrafficLightlist": {
+      "first_len": 9,
+      "last_len": 9
+    },
+    "Strg_StrgSys_St": {
+      "first_len": 28,
+      "last_len": 28
+    },
+    "VIN_INFO": {
+      "first_len": 32,
+      "last_len": 32
+    },
+    "planned_trajectory": {
+      "first_len": 840,
+      "last_len": 840
+    }
+  },
+  "errors": [
+    "sample 5: TimeoutError: timed out",
+    "sample 6: TimeoutError: timed out",
+    "sample 7: TimeoutError: timed out",
+    "sample 8: TimeoutError: timed out",
+    "sample 9: TimeoutError: timed out",
+    "sample 10: TimeoutError: timed out",
+    "sample 11: TimeoutError: timed out",
+    "sample 12: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 13: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 14: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 15: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 16: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 17: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 18: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 19: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 20: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 21: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 22: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 23: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 24: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 25: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 26: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 27: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 28: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 29: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 30: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 31: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 32: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 33: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 34: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 35: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 36: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 37: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 38: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 39: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 40: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 41: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 42: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 43: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 44: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 45: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 46: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 47: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 48: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 49: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 50: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 51: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 52: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 53: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 54: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 55: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 56: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 57: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 58: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。",
+    "sample 59: ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有的连接。"
+  ]
+}
