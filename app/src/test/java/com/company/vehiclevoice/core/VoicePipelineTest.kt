@@ -148,6 +148,45 @@ class VoicePipelineTest {
         assertEquals(listOf(2L, 3L, 4L), asr.receivedSequences)
     }
 
+    @Test
+    fun wakeAcknowledgement_speaksBeforeListeningForCommand() {
+        val asr = CapturingAsrEngine("打开空调")
+        val tts = MockTtsEngine()
+        val logSink = RecordingEventLogSink()
+        val frames = listOf(
+            PcmFrame.silence(sequence = 0),
+            PcmFrame.silence(sequence = 1),
+            PcmFrame.constantTone(sequence = 2, amplitude = 10_000),
+            PcmFrame.constantTone(sequence = 3, amplitude = 10_000),
+            PcmFrame.constantTone(sequence = 4, amplitude = 10_000),
+            PcmFrame.silence(sequence = 5),
+            PcmFrame.silence(sequence = 6)
+        )
+        val pipeline = VoicePipeline(
+            audioSource = FakePcmSource(frames),
+            keywordSpotter = ScriptedKeywordSpotter(wakeSequences = setOf(1L), keyword = "小车小车"),
+            vadEngine = EnergyVadEngine(),
+            asrEngine = asr,
+            intentParser = RuleIntentParser(),
+            stateStore = MockRedisStore(),
+            stateProjector = VehicleStateProjector(),
+            replyTemplateEngine = ReplyTemplateEngine(),
+            ttsEngine = tts,
+            unityActionMapper = UnityActionMapper(clockMs = { 123L }),
+            unityActionJsonEncoder = UnityActionJsonEncoder(),
+            unityEventSink = RecordingUnityEventSink(),
+            logSink = logSink,
+            wakeAcknowledgementText = "我在，请说"
+        )
+
+        pipeline.run(VoicePipelineRunConfig(maxFrames = 20, postWakeAcknowledgementFrames = 1))
+
+        assertEquals(listOf("我在，请说", "已为你打开空调"), tts.spokenTexts())
+        assertEquals(listOf(3L, 4L, 5L), asr.receivedSequences)
+        assertTrue(logSink.lines().any { it.contains("TTS wake_ack=我在，请说") })
+        assertTrue(logSink.lines().any { it.contains("awaiting_command_after_wake_ack") })
+    }
+
     private fun pipeline(
         asrText: String,
         wakeSequences: Set<Long>,

@@ -36,7 +36,8 @@ data class VoicePipelineRunConfig(
     val continueAfterUtterance: Boolean = false,
     val rmsLogEveryFrames: Int = 0,
     val wakeTimeoutFrames: Int = 0,
-    val maxUtteranceFrames: Int = 300
+    val maxUtteranceFrames: Int = 300,
+    val postWakeAcknowledgementFrames: Int = 0
 ) {
     init {
         require(maxFrames > 0) { "maxFrames must be positive" }
@@ -44,6 +45,7 @@ data class VoicePipelineRunConfig(
         require(rmsLogEveryFrames >= 0) { "rmsLogEveryFrames must be non-negative" }
         require(wakeTimeoutFrames >= 0) { "wakeTimeoutFrames must be non-negative" }
         require(maxUtteranceFrames > 0) { "maxUtteranceFrames must be positive" }
+        require(postWakeAcknowledgementFrames >= 0) { "postWakeAcknowledgementFrames must be non-negative" }
     }
 }
 
@@ -62,7 +64,8 @@ class VoicePipeline(
     private val unityEventSink: UnityEventSink,
     private val logSink: EventLogSink,
     private val readOnlySnapshotProvider: VehicleReadOnlySnapshotProvider? = null,
-    private val allowVehicleControlActions: Boolean = true
+    private val allowVehicleControlActions: Boolean = true,
+    private val wakeAcknowledgementText: String? = null
 ) : AutoCloseable {
     fun runUntilSourceEnds(maxFrames: Int = 2_000): VoicePipelineResult = run(
         VoicePipelineRunConfig(maxFrames = maxFrames)
@@ -78,6 +81,7 @@ class VoicePipeline(
         var utterancesHandled = 0
         val utteranceFrames = mutableListOf<PcmFrame>()
         var framesSinceWake = 0
+        var postWakeAcknowledgementFramesRemaining = 0
 
         logSink.info("Pipeline state=listening_start maxFrames=${config.maxFrames} maxUtterances=${config.maxUtterances}")
         audioSource.start()
@@ -101,8 +105,18 @@ class VoicePipeline(
                             vadEngine.reset()
                             logSink.info("Pipeline state=wake_detected frame=${event.frameSequence}")
                             framesSinceWake = 0
+                            postWakeAcknowledgementFramesRemaining = config.postWakeAcknowledgementFrames
                             logSink.info("KWS wake keyword=${event.keyword} confidence=${event.confidence} frame=${event.frameSequence}")
+                            speakWakeAcknowledgementIfNeeded()
                         }
+                    }
+                    continue
+                }
+
+                if (postWakeAcknowledgementFramesRemaining > 0) {
+                    postWakeAcknowledgementFramesRemaining -= 1
+                    if (postWakeAcknowledgementFramesRemaining == 0) {
+                        logSink.info("Pipeline state=awaiting_command_after_wake_ack")
                     }
                     continue
                 }
@@ -114,6 +128,7 @@ class VoicePipeline(
                     keywordSpotter.reset()
                     vadEngine.reset()
                     framesSinceWake = 0
+                    postWakeAcknowledgementFramesRemaining = 0
                     continue
                 }
 
@@ -229,6 +244,16 @@ class VoicePipeline(
             runCatching { value.close() }.onFailure { throwable ->
                 logSink.warn("Resource close failed: ${throwable.message}")
             }
+        }
+    }
+
+    private fun speakWakeAcknowledgementIfNeeded() {
+        val text = wakeAcknowledgementText?.takeIf { it.isNotBlank() } ?: return
+        try {
+            ttsEngine.speak(text)
+            logSink.info("TTS wake_ack=$text")
+        } catch (throwable: Throwable) {
+            logSink.warn("TTS wake acknowledgement failed: ${throwable.message}")
         }
     }
 

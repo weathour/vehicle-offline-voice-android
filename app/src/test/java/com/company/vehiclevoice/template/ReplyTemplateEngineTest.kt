@@ -14,7 +14,7 @@ class ReplyTemplateEngineTest {
         val parser = RuleIntentParser()
 
         assertEquals("已为你打开空调", engine.render(parser.parse("打开空调"), store))
-        assertEquals("没有识别到有效指令", engine.render(parser.parse("无法识别"), store))
+        assertEquals("没有听清请再说一遍", engine.render(parser.parse("无法识别"), store))
     }
 
     @Test

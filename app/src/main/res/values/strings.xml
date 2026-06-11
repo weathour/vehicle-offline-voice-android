@@ -2,5 +2,5 @@
     <string name="app_name">Vehicle Offline Voice</string>
     <string name="voice_service_channel_name">Vehicle Voice Service</string>
     <string name="voice_service_notification_title">离线语音服务运行中</string>
-    <string name="voice_service_notification_text">当前为本地开发骨架，尚未接入 KWS/VAD/ASR。</string>
+    <string name="voice_service_notification_text">离线语音链路已接入，基础测试通过；部分车况字段读取待确认。</string>
 </resources>

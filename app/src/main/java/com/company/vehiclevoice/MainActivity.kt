@@ -66,8 +66,8 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(buildContentView())
-        appendLog("项目骨架已启动：VehicleOfflineVoice")
-        appendLog("当前阶段：上车测试准备；填写车辆/电脑 Redis IP 和端口后，可先连接测试，再启动真实语音。")
+        appendLog("VehicleOfflineVoice 已启动：离线语音主链路已接入，基础测试通过。")
+        appendLog("当前阶段：上车测试与 Redis/protobuf 接口核验；部分车况字段不可读时需结合 key、时间戳和解码状态判断。")
     }
 
     override fun onResume() {
@@ -373,7 +373,8 @@ class MainActivity : Activity() {
             "VoiceForegroundService start command" in line -> statusPanel.text = "状态：服务启动 ${line.after("mode=")}"
             "Foreground service type" in line -> statusPanel.text = "状态：前台麦克风服务已启动 ${line.after("vehicleSource=")}"
             "Pipeline state=listening_start" in line -> statusPanel.text = "状态：监听中，等待唤醒词"
-            "Pipeline state=wake_detected" in line -> statusPanel.text = "状态：已唤醒，请说命令"
+            "Pipeline state=wake_detected" in line -> statusPanel.text = "状态：已唤醒，正在提示"
+            "Pipeline state=awaiting_command_after_wake_ack" in line -> statusPanel.text = "状态：请说指令"
             "Pipeline state=recording_utterance" in line -> statusPanel.text = "状态：正在录制命令"
             "Pipeline state=recognizing" in line -> statusPanel.text = "状态：正在识别命令"
             "Pipeline state=listening_resume" in line -> statusPanel.text = "状态：回到监听，等待下一次唤醒"
@@ -382,6 +383,7 @@ class MainActivity : Activity() {
         if ("KWS wake" in line) wakePanel.text = "唤醒：${line.after("keyword=").before(" confidence=")}"
         if ("ASR text=" in line) asrPanel.text = "识别：${line.after("ASR text=").before(" confidence=").ifBlank { "空结果" }}"
         if ("NLU intent=" in line) nluPanel.text = "意图：${line.after("NLU intent=").before(" reason=")}"
+        if ("TTS wake_ack=" in line) ttsPanel.text = "回复：${line.after("TTS wake_ack=")}"
         if ("TTS reply=" in line) ttsPanel.text = "回复：${line.after("TTS reply=")}"
         if ("Audio frame=" in line) rmsPanel.text = "音频：${line.after("Audio frame=")}"
         if ("Vehicle read-only snapshot" in line) vehiclePanel.text = "只读车况：${line.after("Vehicle read-only snapshot ").before(" warning=").take(220)}"

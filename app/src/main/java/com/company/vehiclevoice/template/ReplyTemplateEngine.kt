@@ -47,7 +47,7 @@ class ReplyTemplateEngine {
         "vehicle_cooperation_count_query" -> store.valueReply("vehicle.cooperation.collaborative_vehicle_count", "当前协作车数量", "辆", "暂未读取到协作车数量")
         "vehicle_cooperation_decision_query" -> renderCooperationDecision(store)
         "unsafe_rejected" -> "该指令不属于离线车控范围，已拒绝执行"
-        else -> "没有识别到有效指令"
+        else -> "没有听清请再说一遍"
     }
 
     private fun VehicleStateStore.valueReply(key: String, prefix: String, suffix: String, fallback: String): String {
