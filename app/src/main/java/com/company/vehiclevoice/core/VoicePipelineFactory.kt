@@ -123,7 +123,7 @@ object VoicePipelineFactory {
             logSink = logSink,
             readOnlySnapshotProvider = readOnlySnapshotProvider,
             allowVehicleControlActions = false,
-            wakeAcknowledgementText = "我在，请说"
+            wakeAcknowledgementText = "我在"
         )
     }
 

@@ -49,6 +49,15 @@ class VoicePipelineEndpointingTest {
         assertTrue(logSink.lines().any { it.contains("wake_timeout") })
     }
 
+    @Test
+    fun realMicMode_keepsLongCommandWindowButShortPostAckTailGuard() {
+        val config = VoicePipelineFactory.runConfigForMode(VoiceRuntimeMode.RealMicManual)
+
+        assertEquals(300, config.wakeTimeoutFrames)
+        assertEquals(300, config.maxUtteranceFrames)
+        assertEquals(8, config.postWakeAcknowledgementFrames)
+    }
+
     private fun pipeline(frames: List<PcmFrame>, logSink: RecordingEventLogSink): VoicePipeline = VoicePipeline(
         audioSource = FakePcmSource(frames),
         keywordSpotter = ScriptedKeywordSpotter(wakeSequences = setOf(1L)),

@@ -250,8 +250,10 @@ class VoicePipeline(
     private fun speakWakeAcknowledgementIfNeeded() {
         val text = wakeAcknowledgementText?.takeIf { it.isNotBlank() } ?: return
         try {
+            val startedAtMs = System.currentTimeMillis()
             ttsEngine.speak(text)
-            logSink.info("TTS wake_ack=$text")
+            val durationMs = System.currentTimeMillis() - startedAtMs
+            logSink.info("TTS wake_ack=$text durationMs=$durationMs")
         } catch (throwable: Throwable) {
             logSink.warn("TTS wake acknowledgement failed: ${throwable.message}")
         }
