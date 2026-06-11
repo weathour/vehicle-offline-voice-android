@@ -26,7 +26,7 @@ data class VehicleDataSourceRuntimeConfig(
     }
 
     companion object {
-        const val DEFAULT_REMOTE_HOST = "10.85.145.111"
+        const val DEFAULT_REMOTE_HOST = "192.168.2.112"
         const val DEFAULT_REMOTE_PORT = 6379
         const val DEFAULT_TIMEOUT_MS = 1500
         const val DEFAULT_SNAPSHOT_DEADLINE_MS = 1200L
