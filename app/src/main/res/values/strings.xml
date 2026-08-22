@@ -1,6 +1,7 @@
 <resources>
-    <string name="app_name">Vehicle Offline Voice</string>
-    <string name="voice_service_channel_name">Vehicle Voice Service</string>
-    <string name="voice_service_notification_title">离线语音服务运行中</string>
-    <string name="voice_service_notification_text">离线语音链路已接入，基础测试通过；部分车况字段读取待确认。</string>
+    <string name="app_name">渝行智声</string>
+    <string name="software_name">渝行智声车载离线语音交互软件</string>
+    <string name="voice_service_channel_name">渝行智声离线语音服务</string>
+    <string name="voice_service_notification_title">渝行智声正在运行</string>
+    <string name="voice_service_notification_text">离线语音服务正在运行，车辆数据以只读方式接入。</string>
 </resources>

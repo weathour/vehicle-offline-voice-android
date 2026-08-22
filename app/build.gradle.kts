@@ -8,11 +8,11 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.company.vehiclevoice"
+        applicationId = "cn.edu.chd.yuxingvoice"
         minSdk = 26
-        targetSdk = 33
-        versionCode = 9
-        versionName = "0.3.8"
+        targetSdk = 35
+        versionCode = 10
+        versionName = "v1.0"
 
         testInstrumentationRunner = "android.app.Instrumentation"
     }

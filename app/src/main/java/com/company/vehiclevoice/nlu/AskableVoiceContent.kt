@@ -61,7 +61,7 @@ object AskableVoiceContent {
         ),
         Category(
             title = "Redis 数据诊断",
-            description = "现场调试用，只读查看连接、解码、缺失 key 和新鲜度。",
+            description = "只读查看连接、解码、缺失 key 和数据新鲜度。",
             questions = listOf(
                 Question("Redis 状态", "vehicle_data_health_query", "连接状态、解码数量、缺失与错误数量"),
                 Question("数据新鲜度", "vehicle_data_freshness_query", "定位、交通灯、车道线时间戳"),
@@ -70,7 +70,7 @@ object AskableVoiceContent {
         ),
         Category(
             title = "暂缓或降级问答",
-            description = "可以问，但本轮只给 schema 待确认或暂未可靠读取的调试回复，不作为稳定能力宣传。",
+            description = "可以问，但未完成车型适配的字段只返回待确认或暂未可靠读取的提示。",
             questions = listOf(
                 Question("空调开了吗", "vehicle_ac_query", "空调开关、模式、风量", "本次实车快照缺少 ACM_INF2/ACM_INF4，schema 待确认", CapabilityLevel.Degraded),
                 Question("当前档位", "vehicle_gear_query", "档位与驻车状态", "DCU_INFO_1 实车字段含 timestamp，旧 gear/parking 映射待确认", CapabilityLevel.Degraded),
@@ -100,6 +100,14 @@ object AskableVoiceContent {
     val supportedQuestions: List<Question> = categories
         .flatMap { it.questions }
         .filterNot { it.level == CapabilityLevel.Disabled }
+
+    val releaseCategories: List<Category> = categories.mapNotNull { category ->
+        category.copy(
+            questions = category.questions.filter {
+                it.level == CapabilityLevel.Stable || it.level == CapabilityLevel.Caveated
+            }
+        ).takeIf { it.questions.isNotEmpty() }
+    }
 
     val stableQuestions: List<Question> = supportedQuestions.filter { it.level == CapabilityLevel.Stable }
 

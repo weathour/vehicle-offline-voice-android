@@ -2,15 +2,13 @@ package com.company.vehiclevoice
 
 import android.Manifest
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Typeface
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.text.InputType
 import android.view.View
 import android.view.ViewGroup
@@ -18,7 +16,6 @@ import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
-import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import com.company.vehiclevoice.data.readonly.RedisVehicleSnapshotProvider
@@ -28,12 +25,12 @@ import com.company.vehiclevoice.core.VoiceRuntimeMode
 import com.company.vehiclevoice.data.readonly.SocketRedisBinaryDataSource
 import com.company.vehiclevoice.data.readonly.SocketRedisConfig
 import com.company.vehiclevoice.nlu.AskableVoiceContent
-import com.company.vehiclevoice.update.GitHubReleaseUpdateClient
-import com.company.vehiclevoice.update.GitHubReleaseVersion
-import com.company.vehiclevoice.update.UpdateApkProvider
 import kotlin.concurrent.thread
 
 class MainActivity : Activity() {
+    private val isDebugBuild: Boolean
+        get() = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+
     private lateinit var logView: TextView
     private lateinit var statusPanel: TextView
     private lateinit var wakePanel: TextView
@@ -52,8 +49,6 @@ class MainActivity : Activity() {
     private lateinit var connectionPanel: TextView
     private lateinit var developerPanel: LinearLayout
     private lateinit var developerToggleButton: Button
-    private lateinit var updatePanel: TextView
-    private lateinit var updateProgressBar: ProgressBar
     private var pendingStartAfterPermission = false
     private var pendingModeAfterPermission: VoiceRuntimeMode = VoiceRuntimeMode.PreviewMock
     private val serviceLogListener: (String) -> Unit = { line ->
@@ -66,8 +61,8 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(buildContentView())
-        appendLog("VehicleOfflineVoice 已启动：离线语音主链路已接入，基础测试通过。")
-        appendLog("当前阶段：上车测试与 Redis/protobuf 接口核验；部分车况字段不可读时需结合 key、时间戳和解码状态判断。")
+        appendLog("${getString(R.string.app_name)}已启动。")
+        appendLog("离线语音服务已就绪，车辆数据通过只读 Redis 接口获取。")
     }
 
     override fun onResume() {
@@ -94,24 +89,24 @@ class MainActivity : Activity() {
         }
 
         val title = TextView(this).apply {
-            text = "Vehicle Offline Voice"
+            text = getString(R.string.software_name)
             textSize = 22f
             setTypeface(typeface, Typeface.BOLD)
         }
         root.addView(title)
         root.addView(TextView(this).apply {
-            text = "上车流程：连接车辆网络 → 填 Redis IP/端口 → 测试连接 → 启动车上语音测试"
+            text = "使用流程：连接车辆网络 → 配置 Redis → 检测数据连接 → 启动离线语音服务"
             textSize = 13f
         })
         root.addView(buildRedisConfigPanel())
 
         root.addView(Button(this).apply {
-            text = "1. 测试 Redis 连接 / 解码"
-            setOnClickListener { testRedisConnection() }
+            text = "1. 检测车辆数据连接"
+            setOnClickListener { checkVehicleDataConnection() }
         })
 
         root.addView(Button(this).apply {
-            text = "2. 启动车上语音测试"
+            text = "2. 启动离线语音服务"
             setOnClickListener {
                 remoteRedisCheckBox.isChecked = true
                 saveRedisConfig()
@@ -119,43 +114,48 @@ class MainActivity : Activity() {
             }
         })
 
-        root.addView(Button(this).apply {
-            text = "Redis 调试页面（1Hz 对比）"
-            setOnClickListener {
-                remoteRedisCheckBox.isChecked = true
-                saveRedisConfig()
-                startActivity(Intent(this@MainActivity, RedisDebugActivity::class.java))
-            }
-        })
+        if (isDebugBuild) {
+            root.addView(Button(this).apply {
+                text = "Redis 调试页面（1Hz 对比）"
+                setOnClickListener {
+                    remoteRedisCheckBox.isChecked = true
+                    saveRedisConfig()
+                    startActivity(Intent(this@MainActivity, RedisDebugActivity::class.java))
+                }
+            })
+        }
 
         root.addView(Button(this).apply {
             text = "停止语音服务"
             setOnClickListener { stopVoiceService() }
         })
 
-        connectionPanel = debugLine("连接诊断", "未测试")
+        connectionPanel = debugLine("连接状态", "未检测")
         root.addView(connectionPanel)
         root.addView(buildAskableContentPanel())
-        root.addView(buildDebugPanel())
-        root.addView(buildDeveloperPanel())
-
-        val logTitle = TextView(this).apply {
-            text = "现场日志"
-            textSize = 16f
-            setTypeface(typeface, Typeface.BOLD)
+        val debugPanel = buildDebugPanel()
+        if (isDebugBuild) {
+            root.addView(debugPanel)
+            root.addView(buildDeveloperPanel())
         }
-        root.addView(logTitle)
 
-        val scrollView = ScrollView(this)
         logView = TextView(this).apply {
             textSize = 12f
             setTextIsSelectable(true)
         }
-        scrollView.addView(logView)
-        root.addView(scrollView, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            dp(220)
-        ))
+        if (isDebugBuild) {
+            root.addView(TextView(this).apply {
+                text = "现场日志"
+                textSize = 16f
+                setTypeface(typeface, Typeface.BOLD)
+            })
+            val logScrollView = ScrollView(this)
+            logScrollView.addView(logView)
+            root.addView(logScrollView, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(220)
+            ))
+        }
 
         page.addView(root)
         return page
@@ -172,13 +172,13 @@ class MainActivity : Activity() {
             setTypeface(typeface, Typeface.BOLD)
         })
         remoteRedisCheckBox = CheckBox(this).apply {
-            text = "读取外部 Redis（上车测试请保持勾选）"
+            text = "读取外部 Redis"
             isChecked = true
             visibility = View.GONE
         }
         panel.addView(remoteRedisCheckBox)
         panel.addView(TextView(this).apply {
-            text = "数据源：外部 Redis（开发模拟入口在下方折叠区）"
+            text = "数据源：车辆只读 Redis"
             textSize = 13f
         })
         redisHostInput = EditText(this).apply {
@@ -204,13 +204,13 @@ class MainActivity : Activity() {
         panel.addView(redisDbInput)
         redisPasswordInput = EditText(this).apply {
             hint = "密码，可留空"
-            setText(loadString(PREF_REDIS_PASSWORD, ""))
+            setText(if (isDebugBuild) loadString(PREF_REDIS_PASSWORD, "") else "")
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine(true)
         }
         panel.addView(redisPasswordInput)
         panel.addView(TextView(this).apply {
-            text = "手机必须与车辆 Redis 在同一网络。连接测试通过后，再启动语音测试。"
+            text = "设备必须与车辆 Redis 位于同一网络。连接检测通过后即可启动语音服务。"
             textSize = 12f
         })
         return panel
@@ -230,7 +230,8 @@ class MainActivity : Activity() {
             text = "实车主流程只做 Redis 只读问答，缺字段会说明证据不足，不会写车控。"
             textSize = 13f
         })
-        AskableVoiceContent.categories.forEach { category ->
+        val categories = if (isDebugBuild) AskableVoiceContent.categories else AskableVoiceContent.releaseCategories
+        categories.forEach { category ->
             panel.addView(TextView(this).apply {
                 text = category.title
                 textSize = 15f
@@ -323,26 +324,9 @@ class MainActivity : Activity() {
                 logView.text = ""
                 resetDebugPanel()
                 UiLogBus.clear()
-                connectionPanel.text = "连接诊断：未测试"
-                updatePanel.text = "版本更新：未检查"
-                resetUpdateProgress()
+                connectionPanel.text = "连接状态：未检测"
             }
         })
-        developerPanel.addView(Button(this).apply {
-            text = "检查 GitHub 版本列表"
-            setOnClickListener { checkGitHubVersionList() }
-        })
-        updatePanel = debugLine("版本更新", "未检查")
-        developerPanel.addView(updatePanel)
-        updateProgressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-            max = 100
-            progress = 0
-            visibility = View.GONE
-        }
-        developerPanel.addView(updateProgressBar, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        ))
         container.addView(developerPanel)
         return container
     }
@@ -460,13 +444,13 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun testRedisConnection() {
+    private fun checkVehicleDataConnection() {
         remoteRedisCheckBox.isChecked = true
         val config = selectedVehicleSourceConfig()
         saveRedisConfig()
-        connectionPanel.text = "连接诊断：正在测试 ${config.host}:${config.port}/db${config.database} ..."
-        appendLog("开始连接测试：${config.displayName}")
-        thread(name = "vehicle-redis-connection-test") {
+        connectionPanel.text = "连接状态：正在检测 ${config.host}:${config.port}/db${config.database} ..."
+        appendLog("开始检测车辆数据连接：${config.displayName}")
+        thread(name = "vehicle-redis-connection-check") {
             val result = runCatching {
                 val provider = RedisVehicleSnapshotProvider(
                     dataSource = SocketRedisBinaryDataSource(
@@ -493,7 +477,7 @@ class MainActivity : Activity() {
                         snapshot.batterySocPercent?.let { "电量${it}%" },
                         snapshot.cooperativeState?.summary
                     ).joinToString("，").ifBlank { "暂无摘要" }
-                    val message = "连接诊断：connected=${snapshot.diagnostics.connected}，decoded=$decoded，missing=$missing，decodeError=$errors；$basic"
+                    val message = "连接状态：connected=${snapshot.diagnostics.connected}，decoded=$decoded，missing=$missing，decodeError=$errors；$basic"
                     connectionPanel.text = message
                     vehiclePanel.text = "只读车况：${snapshot.diagnostics.detail} decoded=$decoded missing=$missing error=$errors"
                     cooperationPanel.text = "协作信息：${snapshot.cooperativeState?.summary ?: "未读取"}"
@@ -502,7 +486,7 @@ class MainActivity : Activity() {
                         appendLog("异常 key：${snapshot.keyStatuses.values.filter { !it.decoded }.take(8).joinToString { "${it.key}:${it.error}" }}")
                     }
                 }.onFailure { throwable ->
-                    val message = "连接诊断：失败 ${throwable.message ?: throwable::class.java.simpleName}"
+                    val message = "连接状态：失败 ${throwable.message ?: throwable::class.java.simpleName}"
                     connectionPanel.text = message
                     statusPanel.text = "状态：Redis 连接失败"
                     appendLog(message)
@@ -511,124 +495,17 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun checkGitHubVersionList() {
-        resetUpdateProgress()
-        updatePanel.text = "版本更新：正在读取 GitHub Releases ..."
-        appendLog("开始检查 GitHub 版本列表")
-        thread(name = "vehicle-github-release-list") {
-            val result = runCatching { GitHubReleaseUpdateClient(this).fetchReleases() }
-            runOnUiThread {
-                result.onSuccess { releases ->
-                    if (releases.isEmpty()) {
-                        updatePanel.text = "版本更新：没有找到带 APK 的 GitHub release"
-                        appendLog("GitHub 版本列表为空或没有 APK 资源")
-                    } else {
-                        updatePanel.text = "版本更新：找到 ${releases.size} 个可安装版本"
-                        showReleaseSelector(releases)
-                    }
-                }.onFailure { throwable ->
-                    val message = throwable.message ?: throwable::class.java.simpleName
-                    updatePanel.text = "版本更新：检查失败 $message"
-                    appendLog("GitHub 版本检查失败：$message")
-                }
-            }
-        }
-    }
-
-    private fun showReleaseSelector(releases: List<GitHubReleaseVersion>) {
-        val labels = releases.map { release -> release.title() }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle("选择要安装的版本")
-            .setItems(labels) { _, which ->
-                downloadSelectedRelease(releases[which])
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-
-    private fun downloadSelectedRelease(release: GitHubReleaseVersion) {
-        val apkUrl = release.apkAssetUrl()
-        if (apkUrl == null) {
-            updatePanel.text = "版本更新：${release.tagName} 没有 APK 资源"
-            return
-        }
-        updateProgressBar.visibility = View.VISIBLE
-        updateProgressBar.isIndeterminate = true
-        updateProgressBar.progress = 0
-        updatePanel.text = "版本更新：正在下载 ${release.tagName} ..."
-        appendLog("开始下载版本：${release.tagName}")
-        thread(name = "vehicle-github-apk-download") {
-            val result = runCatching {
-                GitHubReleaseUpdateClient(this).downloadApk(apkUrl) { progress ->
-                    runOnUiThread { updateDownloadProgress(release.tagName, progress.percent) }
-                }
-            }
-            runOnUiThread {
-                result.onSuccess { apkFile ->
-                    updateProgressBar.isIndeterminate = false
-                    updateProgressBar.progress = 100
-                    updatePanel.text = "版本更新：${release.tagName} 下载完成，准备安装"
-                    installDownloadedApk(apkFile.name)
-                }.onFailure { throwable ->
-                    val message = throwable.message ?: throwable::class.java.simpleName
-                    resetUpdateProgress()
-                    updatePanel.text = "版本更新：下载失败 $message"
-                    appendLog("版本 ${release.tagName} 下载失败：$message")
-                }
-            }
-        }
-    }
-
-    private fun updateDownloadProgress(tagName: String, percent: Int?) {
-        if (!::updateProgressBar.isInitialized) return
-        if (percent == null) {
-            updateProgressBar.visibility = View.VISIBLE
-            updateProgressBar.isIndeterminate = true
-            updatePanel.text = "版本更新：正在下载 $tagName ..."
-        } else {
-            updateProgressBar.visibility = View.VISIBLE
-            updateProgressBar.isIndeterminate = false
-            updateProgressBar.progress = percent
-            updatePanel.text = "版本更新：正在下载 $tagName，$percent%"
-        }
-    }
-
-    private fun resetUpdateProgress() {
-        if (!::updateProgressBar.isInitialized) return
-        updateProgressBar.isIndeterminate = false
-        updateProgressBar.progress = 0
-        updateProgressBar.visibility = View.GONE
-    }
-
-    private fun installDownloadedApk(fileName: String) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
-            resetUpdateProgress()
-            updatePanel.text = "版本更新：请允许本应用安装未知来源应用，授权后重新选择版本"
-            appendLog("安装暂停：需要允许本应用安装未知来源应用")
-            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
-            return
-        }
-        val uri = UpdateApkProvider.contentUri(this, fileName)
-        val intent = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(uri, GitHubReleaseUpdateClient.APK_MIME)
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        runCatching {
-            startActivity(intent)
-            updatePanel.text = "版本更新：已打开系统安装器"
-            appendLog("已打开系统安装器：$fileName")
-        }.onFailure { throwable ->
-            updatePanel.text = "版本更新：无法打开安装器 ${throwable.message ?: throwable::class.java.simpleName}"
-        }
-    }
-
     private fun saveRedisConfig() {
-        getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        val editor = getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(PREF_REDIS_HOST, redisHostInput.text.toString().trim())
             .putString(PREF_REDIS_PORT, redisPortInput.text.toString().trim())
             .putString(PREF_REDIS_DB, redisDbInput.text.toString().trim())
-            .putString(PREF_REDIS_PASSWORD, redisPasswordInput.text.toString())
-            .apply()
+        if (isDebugBuild) {
+            editor.putString(PREF_REDIS_PASSWORD, redisPasswordInput.text.toString())
+        } else {
+            editor.remove(PREF_REDIS_PASSWORD)
+        }
+        editor.apply()
     }
 
     private fun loadString(key: String, fallback: String): String =

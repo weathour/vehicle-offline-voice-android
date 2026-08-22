@@ -29,4 +29,17 @@ class AskableVoiceContentTest {
         assertTrue(AskableVoiceContent.visiblePhraseList.contains("打开空调等控制写入"))
         assertFalse(AskableVoiceContent.stableQuestions.any { it.phrase == "ACC 状态" })
     }
+
+    @Test
+    fun releaseContentOnlyShowsStableAndCaveatedQuestions() {
+        val categories = AskableVoiceContent.releaseCategories
+        val levels = categories.flatMap { it.questions }.map { it.level }.toSet()
+
+        assertTrue(levels.all {
+            it == AskableVoiceContent.CapabilityLevel.Stable ||
+                it == AskableVoiceContent.CapabilityLevel.Caveated
+        })
+        assertFalse(categories.any { it.title == "暂缓或降级问答" })
+        assertFalse(categories.any { it.title == "本轮不启用" })
+    }
 }

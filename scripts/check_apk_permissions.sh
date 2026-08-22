@@ -4,10 +4,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/scripts/env.sh"
 cd "$ROOT_DIR"
 
-APK="app/build/outputs/apk/debug/app-debug.apk"
+APK="${1:-app/build/outputs/apk/debug/app-debug.apk}"
 if [[ ! -f "$APK" ]]; then
-  echo "APK not found, building debug package first..."
-  bash scripts/build_debug.sh
+  echo "ERROR: APK not found: $APK" >&2
+  exit 1
 fi
 
 AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
@@ -27,13 +27,17 @@ for required in \
   'android.permission.INTERNET' \
   'android.permission.FOREGROUND_SERVICE' \
   'android.permission.FOREGROUND_SERVICE_MICROPHONE' \
-  'android.permission.POST_NOTIFICATIONS' \
-  'android.permission.REQUEST_INSTALL_PACKAGES'; do
+  'android.permission.POST_NOTIFICATIONS'; do
   if ! grep -q "$required" <<<"$PERMISSIONS"; then
     echo "ERROR: APK is missing required permission: $required" >&2
     exit 1
   fi
 done
+
+if grep -q 'android.permission.REQUEST_INSTALL_PACKAGES' <<<"$PERMISSIONS"; then
+  echo "ERROR: APK must not request package installation permission" >&2
+  exit 1
+fi
 
 MERGED_MANIFEST="app/build/intermediates/merged_manifest/debug/processDebugMainManifest/AndroidManifest.xml"
 if [[ ! -f "$MERGED_MANIFEST" ]]; then
@@ -44,4 +48,4 @@ if ! grep -q 'android:foregroundServiceType="microphone"' "$MERGED_MANIFEST"; th
   exit 1
 fi
 
-echo "APK permission policy OK: INTERNET intentionally present for remote Redis and GitHub update checks; required local voice permissions, update install request permission, and microphone FGS type declared."
+echo "APK permission policy OK: only the Redis network and local voice permissions are declared; package installation permission is absent."

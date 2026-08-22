@@ -10,7 +10,7 @@
 - Android Gradle Plugin：`8.7.3`
 - Kotlin Android 插件：`2.0.21`
 - JDK：`17`
-- Android SDK：`compileSdk 35`，`minSdk 26`，`targetSdk 33`
+- Android SDK：`compileSdk 35`，`minSdk 26`，`targetSdk 35`
 - 当前阶段：只读车辆状态，不发真实车辆控制命令
 
 ## 2. 通用前置要求

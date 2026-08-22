@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "VehicleOfflineVoice"
+rootProject.name = "YuXingVoice"
 include(":app")

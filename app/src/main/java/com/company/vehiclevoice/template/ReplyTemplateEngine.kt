@@ -55,7 +55,7 @@ class ReplyTemplateEngine {
         return if (suffix.isBlank()) "$prefix：$value" else "$prefix：$value$suffix"
     }
 
-    private fun schemaPending(text: String): String = "$text（schema 待车端确认，仅供调试参考）"
+    private fun schemaPending(text: String): String = "$text（该字段待车端适配确认）"
 
     private fun renderSchemaPendingValue(store: VehicleStateStore, key: String, prefix: String, fallback: String): String {
         val value = store.get(key) ?: return "$fallback，schema 待车端确认"
