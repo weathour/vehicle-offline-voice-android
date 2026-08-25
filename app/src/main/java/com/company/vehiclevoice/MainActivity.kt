@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Typeface
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.text.InputType
@@ -28,10 +29,12 @@ import com.company.vehiclevoice.data.readonly.SocketRedisBinaryDataSource
 import com.company.vehiclevoice.data.readonly.SocketRedisConfig
 import com.company.vehiclevoice.log.AndroidEventLogSink
 import com.company.vehiclevoice.nlu.AskableVoiceContent
-import com.company.vehiclevoice.tts.AndroidTtsEngine
-import com.company.vehiclevoice.tts.FallbackTtsEngine
-import com.company.vehiclevoice.tts.FixedPromptPlayer
-import com.company.vehiclevoice.tts.SherpaOfflineTtsEngine
+import com.company.vehiclevoice.tts.OnlineTtsConfig
+import com.company.vehiclevoice.tts.TtsConfigStore
+import com.company.vehiclevoice.tts.TtsProvider
+import com.company.vehiclevoice.tts.createConfiguredTtsEngine
+import java.io.ByteArrayOutputStream
+import java.nio.charset.StandardCharsets
 import kotlin.concurrent.thread
 
 class MainActivity : Activity() {
@@ -54,7 +57,10 @@ class MainActivity : Activity() {
     private lateinit var redisDbInput: EditText
     private lateinit var redisPasswordInput: EditText
     private lateinit var connectionPanel: TextView
-    private lateinit var systemTtsRadioButton: RadioButton
+    private lateinit var spokenTextPanel: TextView
+    private lateinit var ttsConfigStatus: TextView
+    private val ttsRadioButtons = linkedMapOf<TtsProvider, RadioButton>()
+    private var ttsConfig = OnlineTtsConfig()
     private lateinit var developerPanel: LinearLayout
     private lateinit var developerToggleButton: Button
     private var pendingStartAfterPermission = false
@@ -70,7 +76,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(buildContentView())
         appendLog("${getString(R.string.app_name)}已启动。")
-        appendLog("离线语音服务已就绪，车辆数据通过只读 Redis 接口获取。")
+        appendLog("语音服务已就绪，识别离线运行，播报使用当前 TTS 设置。")
     }
 
     override fun onResume() {
@@ -106,6 +112,7 @@ class MainActivity : Activity() {
             text = "使用流程：连接车辆网络 → 配置 Redis → 选择语音 → 检测连接 → 启动服务"
             textSize = 13f
         })
+        root.addView(buildSpokenTextPanel())
         root.addView(buildRedisConfigPanel())
         root.addView(buildTtsPanel())
 
@@ -115,7 +122,7 @@ class MainActivity : Activity() {
         })
 
         root.addView(Button(this).apply {
-            text = "2. 启动离线语音服务"
+            text = "2. 启动语音服务"
             setOnClickListener {
                 remoteRedisCheckBox.isChecked = true
                 saveRedisConfig()
@@ -239,31 +246,85 @@ class MainActivity : Activity() {
             textSize = 16f
             setTypeface(typeface, Typeface.BOLD)
         })
-        val local = RadioButton(this).apply {
-            text = "高质量本地语音（推荐，离线可用）"
-            minimumHeight = dp(48)
-        }
-        systemTtsRadioButton = RadioButton(this).apply {
-            text = "Android 系统语音（不可用时自动回退本地）"
-            minimumHeight = dp(48)
-        }
+        ttsConfig = loadTtsConfig()
         val group = RadioGroup(this).apply {
             orientation = RadioGroup.VERTICAL
-            addView(local)
-            addView(systemTtsRadioButton)
         }
-        if (loadBoolean(PREF_SYSTEM_TTS, false)) systemTtsRadioButton.isChecked = true else local.isChecked = true
-        group.setOnCheckedChangeListener { _, _ -> saveTtsPreference() }
+        TtsProvider.entries.forEach { provider ->
+            val button = RadioButton(this).apply {
+                id = View.generateViewId()
+                text = when (provider) {
+                    TtsProvider.Edge -> "Edge 在线语音（免注册，推荐）"
+                    TtsProvider.Baidu -> "百度在线语音（需导入 API 配置）"
+                    TtsProvider.Tencent -> "腾讯云在线语音（需导入 API 配置）"
+                    TtsProvider.System -> "Android 系统语音"
+                }
+                minimumHeight = dp(48)
+                isEnabled = ttsConfig.isConfigured(provider)
+            }
+            ttsRadioButtons[provider] = button
+            group.addView(button)
+        }
+        val preferred = preferredTtsProvider()
+        ttsRadioButtons[preferred.takeIf(ttsConfig::isConfigured) ?: TtsProvider.Edge]?.isChecked = true
+        group.setOnCheckedChangeListener { _, checkedId ->
+            ttsRadioButtons.entries.firstOrNull { it.value.id == checkedId }?.let {
+                saveTtsPreference(it.key)
+                updateTtsConfigStatus()
+            }
+        }
         panel.addView(group)
         panel.addView(Button(this).apply {
             text = "试听当前语音"
+            minimumHeight = dp(48)
             setOnClickListener { previewTts(this) }
         })
-        panel.addView(TextView(this).apply {
-            text = "本地语音使用 24 kHz Kokoro 中英双语模型；切换后下次启动服务生效。"
-            textSize = 12f
+        panel.addView(Button(this).apply {
+            text = "导入 TTS 配置文件"
+            minimumHeight = dp(48)
+            setOnClickListener { chooseTtsConfigFile() }
         })
+        panel.addView(Button(this).apply {
+            text = "清除已导入的 TTS 配置"
+            minimumHeight = dp(48)
+            setOnClickListener { clearTtsConfig() }
+        })
+        ttsConfigStatus = TextView(this).apply {
+            textSize = 12f
+            setTextIsSelectable(true)
+        }
+        panel.addView(ttsConfigStatus)
+        updateTtsConfigStatus()
         return panel
+    }
+
+    private fun buildSpokenTextPanel(): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(0, dp(12), 0, dp(16))
+        addView(TextView(this@MainActivity).apply {
+            text = "当前播报内容"
+            textSize = 18f
+            setTypeface(typeface, Typeface.BOLD)
+        })
+        spokenTextPanel = TextView(this@MainActivity).apply {
+            text = "尚无播报内容"
+            textSize = 22f
+            setLineSpacing(dp(4).toFloat(), 1.08f)
+            setPadding(dp(18), dp(18), dp(18), dp(18))
+            minimumHeight = dp(112)
+            background = getDrawable(R.drawable.speech_output_background)
+            setTextIsSelectable(true)
+            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+        }
+        addView(
+            spokenTextPanel,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        )
+        addView(TextView(this@MainActivity).apply {
+            text = "即使设备没有可用 TTS 或网络异常，这里仍会显示本次应播报的完整文字。"
+            textSize = 12f
+            setPadding(0, dp(6), 0, 0)
+        })
     }
 
     private fun buildAskableContentPanel(): LinearLayout {
@@ -394,6 +455,7 @@ class MainActivity : Activity() {
         asrPanel.text = "最近听到：尚无识别结果"
         nluPanel.text = "意图：无"
         ttsPanel.text = "回复：无"
+        spokenTextPanel.text = "尚无播报内容"
         rmsPanel.text = "音频：无 RMS"
         vehiclePanel.text = "只读车况：未读取"
         warningPanel.text = "告警解释：未读取"
@@ -410,6 +472,7 @@ class MainActivity : Activity() {
             "Pipeline state=recording_utterance" in line -> statusPanel.text = "状态：正在录制命令"
             "Pipeline state=recognizing" in line -> statusPanel.text = "状态：正在识别命令"
             "Pipeline state=listening_resume" in line -> statusPanel.text = "状态：回到监听，等待下一次唤醒"
+            "TTS " in line && " failed" in line -> statusPanel.text = "状态：语音播报不可用，回答已显示"
             "VoicePipelineController failed" in line || "ERROR" in line -> statusPanel.text = "状态：错误 ${line.takeLast(80)}"
         }
         if ("KWS wake" in line) wakePanel.text = "唤醒：${line.after("keyword=").before(" confidence=")}"
@@ -417,8 +480,8 @@ class MainActivity : Activity() {
             asrPanel.text = "最近听到：${line.after("ASR text=").before(" confidence=").ifBlank { "未识别到语音" }}"
         }
         if ("NLU intent=" in line) nluPanel.text = "意图：${line.after("NLU intent=").before(" reason=")}"
-        if ("TTS wake_ack=" in line) ttsPanel.text = "回复：${line.after("TTS wake_ack=")}"
-        if ("TTS reply=" in line) ttsPanel.text = "回复：${line.after("TTS reply=")}"
+        if ("TTS wake_ack=" in line) showSpokenText(line.after("TTS wake_ack="))
+        if ("TTS reply=" in line) showSpokenText(line.after("TTS reply="))
         if ("Audio frame=" in line) rmsPanel.text = "音频：${line.after("Audio frame=")}"
         if ("Vehicle read-only snapshot" in line) vehiclePanel.text = "只读车况：${line.after("Vehicle read-only snapshot ").before(" warning=").take(220)}"
         if (" warning=" in line) warningPanel.text = "告警解释：${line.after(" warning=").before(" cooperation=").take(180)}"
@@ -428,6 +491,12 @@ class MainActivity : Activity() {
 
     private fun String.after(token: String): String = substringAfter(token, missingDelimiterValue = "")
     private fun String.before(token: String): String = substringBefore(token, missingDelimiterValue = this)
+
+    private fun showSpokenText(text: String) {
+        val value = text.trim().ifBlank { "尚无播报内容" }
+        spokenTextPanel.text = value
+        ttsPanel.text = "回复：$value"
+    }
 
     private fun startVoiceServiceWhenPermissionsReady(mode: VoiceRuntimeMode) {
         val permissions = missingRuntimePermissions(mode)
@@ -460,7 +529,7 @@ class MainActivity : Activity() {
         saveRedisConfig()
         val intent = Intent(this, VoiceForegroundService::class.java)
             .putExtra(VoiceRuntimeMode.EXTRA_NAME, mode.wireValue)
-            .putExtra(VoiceForegroundService.EXTRA_PREFER_SYSTEM_TTS, systemTtsRadioButton.isChecked)
+            .putExtra(VoiceForegroundService.EXTRA_TTS_PROVIDER, selectedTtsProvider().wireValue)
             .putExtra(VehicleDataSourceRuntimeConfig.EXTRA_SOURCE_MODE, sourceConfig.mode.wireValue)
             .putExtra(VehicleDataSourceRuntimeConfig.EXTRA_REDIS_HOST, sourceConfig.host)
             .putExtra(VehicleDataSourceRuntimeConfig.EXTRA_REDIS_PORT, sourceConfig.port)
@@ -480,26 +549,19 @@ class MainActivity : Activity() {
     }
 
     private fun previewTts(button: Button) {
-        saveTtsPreference()
-        val preferSystemTts = systemTtsRadioButton.isChecked
+        val provider = selectedTtsProvider()
+        saveTtsPreference(provider)
         val ttsName = selectedTtsName()
         button.isEnabled = false
         statusPanel.text = "状态：正在加载并试听$ttsName"
+        showSpokenText(TTS_PREVIEW_TEXT)
         thread(name = "vehicle-tts-preview") {
             val result = runCatching {
-                val prompts = FixedPromptPlayer(this)
-                val engine = FallbackTtsEngine(
-                    embeddedFactory = { SherpaOfflineTtsEngine(this) },
-                    systemFactory = { AndroidTtsEngine(this) },
-                    playFixedPrompt = prompts::playIfKnown,
-                    playUnavailablePrompt = prompts::playUnavailable,
-                    logSink = AndroidEventLogSink(),
-                    preferSystem = preferSystemTts
-                )
+                val engine = createConfiguredTtsEngine(this, provider, AndroidEventLogSink())
                 try {
                     engine.speak(TTS_PREVIEW_TEXT)
                 } finally {
-                    engine.close()
+                    if (engine is AutoCloseable) engine.close()
                 }
             }
             runOnUiThread {
@@ -515,8 +577,12 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun selectedTtsName(): String =
-        if (systemTtsRadioButton.isChecked) "Android 系统语音" else "高质量本地语音"
+    private fun selectedTtsProvider(): TtsProvider = ttsRadioButtons.entries
+        .firstOrNull { it.value.isChecked }
+        ?.key
+        ?: TtsProvider.Edge
+
+    private fun selectedTtsName(): String = selectedTtsProvider().displayName
 
     private fun selectedVehicleSourceConfig(): VehicleDataSourceRuntimeConfig {
         val host = redisHostInput.text.toString().trim().ifBlank { VehicleDataSourceRuntimeConfig.DEFAULT_REMOTE_HOST }
@@ -601,17 +667,117 @@ class MainActivity : Activity() {
         editor.apply()
     }
 
-    private fun saveTtsPreference() {
+    private fun saveTtsPreference(provider: TtsProvider = selectedTtsProvider()) {
         getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putBoolean(PREF_SYSTEM_TTS, systemTtsRadioButton.isChecked)
+            .putString(PREF_TTS_PROVIDER, provider.wireValue)
+            .remove(PREF_SYSTEM_TTS)
             .apply()
+    }
+
+    private fun preferredTtsProvider(): TtsProvider {
+        val preferences = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val saved = preferences.getString(PREF_TTS_PROVIDER, null)
+        if (saved != null) return TtsProvider.fromWireValue(saved)
+        return if (preferences.getBoolean(PREF_SYSTEM_TTS, false)) TtsProvider.System else ttsConfig.defaultProvider
+    }
+
+    private fun loadTtsConfig(): OnlineTtsConfig = runCatching { TtsConfigStore(this).load() }
+        .onFailure { appendLog("TTS 配置读取失败：${it.message}") }
+        .getOrDefault(OnlineTtsConfig())
+
+    private fun updateTtsConfigStatus(message: String? = null) {
+        if (!::ttsConfigStatus.isInitialized) return
+        val selected = selectedTtsProvider()
+        ttsConfigStatus.text = message ?: buildString {
+            append("当前：${selected.displayName}。")
+            append("Edge 免注册但需要联网；")
+            append("百度${if (ttsConfig.baidu == null) "未配置" else "已配置"}；")
+            append("腾讯云${if (ttsConfig.tencent == null) "未配置" else "已配置"}。")
+            append("在线语音失败会尝试系统 TTS；仍失败时播放固定提示，并保留屏幕文字。")
+        }
+    }
+
+    private fun refreshTtsChoices(preferred: TtsProvider = ttsConfig.defaultProvider) {
+        ttsRadioButtons.forEach { (provider, button) ->
+            button.isEnabled = ttsConfig.isConfigured(provider)
+        }
+        val selected = preferred.takeIf(ttsConfig::isConfigured) ?: TtsProvider.Edge
+        ttsRadioButtons[selected]?.isChecked = true
+        saveTtsPreference(selected)
+        updateTtsConfigStatus()
+    }
+
+    private fun chooseTtsConfigFile() {
+        startActivityForResult(
+            Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "application/json"
+            },
+            REQUEST_TTS_CONFIG
+        )
+    }
+
+    private fun clearTtsConfig() {
+        statusPanel.text = "状态：正在清除 TTS 配置"
+        thread(name = "vehicle-tts-config-clear") {
+            val result = runCatching { TtsConfigStore(this).clear() }
+            runOnUiThread {
+                result.onSuccess {
+                    ttsConfig = OnlineTtsConfig()
+                    refreshTtsChoices(TtsProvider.Edge)
+                    statusPanel.text = "状态：TTS 配置已清除"
+                }.onFailure { throwable ->
+                    statusPanel.text = "状态：清除 TTS 配置失败 ${throwable.message}"
+                }
+            }
+        }
+    }
+
+    @Deprecated("Uses the platform document picker without adding another dependency")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_TTS_CONFIG || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        statusPanel.text = "状态：正在导入 TTS 配置"
+        thread(name = "vehicle-tts-config-import") {
+            val result = runCatching {
+                val config = OnlineTtsConfig.parse(readTtsConfig(uri))
+                TtsConfigStore(this).save(config)
+                config
+            }
+            runOnUiThread {
+                result.onSuccess { config ->
+                    ttsConfig = config
+                    refreshTtsChoices(config.defaultProvider)
+                    statusPanel.text = "状态：TTS 配置导入成功"
+                    appendLog("TTS 配置导入成功，未记录凭据内容")
+                }.onFailure { throwable ->
+                    statusPanel.text = "状态：TTS 配置导入失败 ${throwable.message}"
+                    updateTtsConfigStatus("配置未导入：${throwable.message}")
+                }
+            }
+        }
+    }
+
+    private fun readTtsConfig(uri: Uri): String {
+        val input = contentResolver.openInputStream(uri) ?: error("无法读取所选文件")
+        val output = ByteArrayOutputStream()
+        input.use {
+            val buffer = ByteArray(4 * 1024)
+            while (true) {
+                val count = it.read(buffer)
+                if (count < 0) break
+                require(output.size() + count <= OnlineTtsConfig.MAX_CONFIG_BYTES) {
+                    "TTS 配置文件不能超过 32 KB"
+                }
+                output.write(buffer, 0, count)
+            }
+        }
+        return String(output.toByteArray(), StandardCharsets.UTF_8)
     }
 
     private fun loadString(key: String, fallback: String): String =
         getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(key, fallback) ?: fallback
-
-    private fun loadBoolean(key: String, fallback: Boolean): Boolean =
-        getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(key, fallback)
 
     override fun onRequestPermissionsResult(
         requestCode: Int,
@@ -653,7 +819,9 @@ class MainActivity : Activity() {
         private const val PREF_REDIS_PORT = "redis_port"
         private const val PREF_REDIS_DB = "redis_db"
         private const val PREF_REDIS_PASSWORD = "redis_password"
+        private const val PREF_TTS_PROVIDER = "tts_provider"
         private const val PREF_SYSTEM_TTS = "prefer_system_tts"
+        private const val REQUEST_TTS_CONFIG = 43
         private const val TTS_PREVIEW_TEXT =
             "语音测试。当前车速三十二公里每小时，V2X connection is ready，Redis data is normal。"
     }

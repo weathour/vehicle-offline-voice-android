@@ -297,6 +297,8 @@ class VoicePipeline(
     }
 
     private fun speakSafely(text: String, logLabel: String, failureMessage: String) {
+        // Published before synthesis so the UI remains useful when every TTS backend is unavailable.
+        logSink.info("TTS $logLabel=$text")
         val resumeAudio = pauseAudioDuringTts && audioSource.isStarted
         if (resumeAudio) {
             audioSource.stop()
@@ -305,7 +307,9 @@ class VoicePipeline(
         try {
             val startedAtMs = System.currentTimeMillis()
             ttsEngine.speak(text)
-            logSink.info("TTS $logLabel=$text durationMs=${System.currentTimeMillis() - startedAtMs}")
+            logSink.info(
+                "TTS result label=$logLabel status=success durationMs=${System.currentTimeMillis() - startedAtMs}"
+            )
         } catch (throwable: Throwable) {
             if (throwable is InterruptedException || Thread.currentThread().isInterrupted) {
                 Thread.currentThread().interrupt()

@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "defaultProvider": "edge",
+  "edge": {
+    "voice": "zh-CN-XiaoxiaoNeural",
+    "rate": "+0%",
+    "volume": "+20%"
+  },
+  "baidu": {
+    "appId": "YOUR_BAIDU_APP_ID",
+    "apiKey": "YOUR_BAIDU_API_KEY",
+    "secretKey": "YOUR_BAIDU_SECRET_KEY",
+    "voice": 0,
+    "speed": 5,
+    "pitch": 5,
+    "volume": 9
+  },
+  "tencent": {
+    "secretId": "YOUR_TENCENT_SECRET_ID",
+    "secretKey": "YOUR_TENCENT_SECRET_KEY",
+    "voiceType": 101001,
+    "speed": 0.0,
+    "volume": 5.0,
+    "sampleRate": 24000
+  }
+}

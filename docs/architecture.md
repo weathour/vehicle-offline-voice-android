@@ -1,51 +1,43 @@
 # 渝行智声 Android 架构
 
-## 范围
-
-本仓库只构建原生 Android/Kotlin APK。车辆数据访问保持只读，Unity 侧仍通过稳定的动作 JSON 边界隔离。
-
-## 本地离线链路
+## 主链路
 
 ```text
 VoiceForegroundService
   -> VoicePipelineController
-  -> AudioSource
-  -> KeywordSpotter
-  -> VadEngine
-  -> AsrEngine
-  -> IntentParser
-  -> VehicleReadOnlySnapshotProvider / VehicleStateStore
+  -> AudioSource -> KeywordSpotter -> VadEngine -> Vosk AsrEngine
+  -> IntentParser -> VehicleReadOnlySnapshotProvider
   -> ReplyTemplateEngine
+  -> UI log bus（先显示应播报文字）
   -> FallbackTtsEngine
        -> fixed wake WAV
-       -> selected TTS first (embedded Kokoro / Android system)
-       -> the other TTS backend
+       -> selected provider (Edge / Baidu / Tencent / Android system)
+       -> Android system TTS（在线供应商失败时）
        -> fixed unavailable WAV
   -> UnityActionMapper / UnityActionJsonEncoder / UnityEventSink
 ```
 
-真实麦克风模式在播报期间停止 `AudioRecord`，播报结束后重建采集并重置 KWS/VAD，避免应用自己的声音回灌识别链路。
+业务层只依赖 `TtsEngine.speak(text)`。`VoicePipeline.speakSafely()` 在调用引擎前发布回答文字，所以合成、网络或播放失败不会让 UI 丢失回答，也不会阻断管线恢复监听。
 
-## 边界规则
+## TTS 配置
 
-- Android API 限制在 Activity、Service、音频和 TTS 适配器内。
-- 核心业务模块可在 JVM 上测试；fake/scripted 组件仅用于测试和预览模式。
-- 正式麦克风模式使用 Vosk 离线 ASR、规则 NLU、只读 Redis/protobuf 数据源和内置 sherpa-onnx Kokoro 中英双语 TTS。
-- 业务链路只依赖 `TtsEngine.speak(text)`，不直接依赖 Android `TextToSpeech`。
-- 主界面只保存“系统语音优先”这一布尔选项；回退、生命周期和业务接口继续复用现有实现。
-- Unity 仍由动作 JSON 表示；完成 IPC 接入前不要求 Unity 进程存在。
+- `TtsProvider` 是界面、前台服务 Intent 和 TTS 工厂共用的四值枚举。
+- `TtsConfigStore` 用 Android Keystore 的 AES/GCM 密钥加密供应商配置；应用只保存 IV 和密文。
+- 配置只允许固定字段，限制为 32 KB，并校验字段范围和示例占位符。
+- 在线响应限制为 10 MB；HTTP、WebSocket 和播放都设置超时。
+- 选择在线供应商时，失败后创建 Android 系统 TTS；所有后端失败后播放固定故障提示。
 
 ## Android 生命周期
 
-- `MainActivity` requests `RECORD_AUDIO` and Android 13+ `POST_NOTIFICATIONS` before starting the foreground service.
-- `VoiceForegroundService` declares `android:foregroundServiceType="microphone"` and uses microphone FGS type when starting foreground on Android Q+.
-- `AndroidAudioRecordSource` refuses to start when `RECORD_AUDIO` is not granted.
-- `VoicePipelineController.start()/stop()/close()` use a background single-thread runner, explicit `Idle/Running/Completed/Failed/Stopped/Closed` states, and service cleanup via `close()`.
+- `MainActivity` 在启动真实麦克风服务前请求 `RECORD_AUDIO` 和 Android 13+ `POST_NOTIFICATIONS`。
+- `VoiceForegroundService` 声明并启动 microphone foreground service。
+- 播报期间停止 `AudioRecord`；播报结束后重建采集并重置 KWS/VAD，避免回声回灌。
+- `VoicePipelineController.start()/stop()/close()` 使用单线程执行器并显式管理状态。
 
-## 安全与离线约束
+## 安全边界
 
-- `android.permission.INTERNET` is intentionally present for remote Redis read-only status checks. The Android Redis path issues only `GET` after optional `AUTH`/`SELECT`; simulator write scripts refuse non-loopback writes unless explicitly acknowledged.
-- Unsafe/prompt-injection-like ASR text maps to `unsafe_rejected`, does not mutate vehicle state, and does not create Unity action JSON.
-- APK permission checks are enforced by `scripts/check_apk_permissions.sh`.
-- sherpa-onnx 运行库、Kokoro INT8 中英模型和 24 kHz 固定提示音都位于 APK 内；默认主播报链路不依赖网络、Play 商店或系统 TTS。
-- 第三方组件和模型来源见 `THIRD_PARTY_NOTICES.md`。
+- Redis 路径在可选 `AUTH`/`SELECT` 后只执行 `GET`；不写车控。
+- ASR 音频始终本地处理。只有选用在线 TTS 时，最终回答文字会发给所选供应商。
+- API 密钥不写入源码、APK、日志、Release 附件或普通 SharedPreferences。
+- 不安全或疑似提示注入的识别文本映射为 `unsafe_rejected`，不修改车辆状态，也不创建 Unity 动作 JSON。
+- APK 权限由 `scripts/check_apk_permissions.sh` 检查。

@@ -3,17 +3,18 @@ package com.company.vehiclevoice.tts
 import com.company.vehiclevoice.log.EventLogSink
 
 class FallbackTtsEngine(
-    embeddedFactory: () -> TtsEngine,
-    systemFactory: () -> TtsEngine,
+    primaryName: String,
+    primaryFactory: () -> TtsEngine,
+    fallbackName: String? = null,
+    fallbackFactory: (() -> TtsEngine)? = null,
     private val playFixedPrompt: (String) -> Boolean = { false },
     private val playUnavailablePrompt: (() -> Unit)? = null,
-    private val logSink: EventLogSink,
-    preferSystem: Boolean = false
+    private val logSink: EventLogSink
 ) : TtsEngine, AutoCloseable {
-    private val backends = listOf(
-        Backend("embedded", embeddedFactory),
-        Backend("system", systemFactory)
-    ).let { if (preferSystem) it.reversed() else it }
+    private val backends = buildList {
+        add(Backend(primaryName, primaryFactory))
+        if (fallbackName != null && fallbackFactory != null) add(Backend(fallbackName, fallbackFactory))
+    }
     private var closed = false
 
     @Synchronized
@@ -56,11 +57,10 @@ class FallbackTtsEngine(
                 return
             } catch (throwable: Throwable) {
                 rethrowIfInterrupted(throwable)
-                backend.disabled = true
                 failures += "${backend.name}: ${throwable.message}"
                 closeEngine(engine)
                 backend.instance = null
-                logSink.warn("TTS engine=${backend.name} status=disabled reason=${throwable.message}")
+                logSink.warn("TTS engine=${backend.name} status=failed reason=${throwable.message}")
             }
         }
 
@@ -69,7 +69,6 @@ class FallbackTtsEngine(
             try {
                 unavailablePrompt()
                 logSink.warn("TTS engine=fixed_unavailable status=success failures=${failures.joinToString(" | ")}")
-                return
             } catch (throwable: Throwable) {
                 rethrowIfInterrupted(throwable)
                 failures += "fixed unavailable: ${throwable.message}"

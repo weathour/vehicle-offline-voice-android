@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">渝行智声</string>
-    <string name="software_name">渝行智声车载离线语音交互软件</string>
-    <string name="voice_service_channel_name">渝行智声离线语音服务</string>
+    <string name="software_name">渝行智声车载语音交互软件</string>
+    <string name="voice_service_channel_name">渝行智声语音服务</string>
     <string name="voice_service_notification_title">渝行智声正在运行</string>
-    <string name="voice_service_notification_text">离线语音服务正在运行，车辆数据以只读方式接入。</string>
+    <string name="voice_service_notification_text">离线识别正在运行，播报使用当前 TTS 设置。</string>
 </resources>

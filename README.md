@@ -1,97 +1,84 @@
-# 渝行智声车载离线语音交互软件
+# 渝行智声车载语音交互软件
 
-“渝行智声”v1.3 是面向手机和车载 Android 终端的车载离线语音交互软件。设备连接车辆只读 Redis 数据源后，可通过离线语音查询车速、电量、告警和协作场景等车辆状态。
+“渝行智声”v1.4 面向手机和车载 Android 终端。设备连接车辆只读 Redis 数据源后，可用离线语音识别查询车速、电量、告警和协作场景，并通过可选 TTS 播报回答。
 
 著作权人：长安大学。主要开发人员：杨兴杰、陈婷、徐志刚、王嘉鑫、申丹丹。正式包名：`cn.edu.chd.yuxingvoice`。
 
-## 当前状态
+## 当前能力
 
-已完成：
-
-- Android 真机离线语音链路：唤醒词、VAD、Vosk ASR、规则 NLU、内置 sherpa-onnx Kokoro 中英双语 TTS。
-- 界面可选择“高质量本地语音”或“Android 系统语音”并试听；任一首选不可用时自动尝试另一后端。
-- 无需安装系统 TTS 或中文语音包；默认本地播报完全离线，最后仍有固定 WAV 故障提示。
-- TTS 播报期间暂停麦克风采集，避免扬声器回声被唤醒或识别链路再次收录。
-- 只读 Redis/protobuf 车辆状态读取。
-- 手机读取电脑 Redis 模拟器并完成端到端测试。
-- 车速、电量、定位、感知、轨迹和 Sam 协作场景等只读问答。
-- ASR 常见误识别与特色短音收敛，例如“党”查询档位、“瑞迪丝”查询 Redis、“写作常见”查询协作场景。
-- 正式界面显示最近一次 ASR 原始识别文本，便于现场确认设备实际听到了什么。
-- TTS 只转换 `V2I/V2V/V2X`、SOC、RTK 等明确的工程缩写，普通英文原样交给中英双语模型。
-- 正式使用 UI：填写 Redis IP/端口，检测数据连接后启动离线语音服务。
+- 唤醒词、VAD、Vosk ASR 和规则 NLU 全部离线运行。
+- 可选 Edge、百度、腾讯云三种在线 TTS，或设备自带的 Android 系统 TTS。
+- Edge 默认免注册；百度和腾讯云通过用户提供的 JSON 配置启用，密钥导入后由 Android Keystore 加密保存，不进入 APK、日志或普通偏好设置。
+- 在线 TTS 失败时自动尝试系统 TTS；仍不可用时播放固定 WAV 提示。
+- 主界面始终显示“当前播报内容”。即使设备没有 TTS、没有网络或凭据失效，回答文字仍可读取。
+- TTS 播放期间暂停麦克风采集，避免扬声器回声再次进入识别链路。
+- 车辆数据访问只执行 Redis `GET`，当前版本不发真实车辆控制命令。
 
 ## 使用流程
 
-1. 手机连接车辆网络。
-2. 打开 APK。
-3. 填 Redis IP、端口、DB，密码可留空。
-4. 选择 **高质量本地语音**（推荐）或 **Android 系统语音**，可先点击 **试听当前语音**。
-5. 点击 **检测车辆数据连接**。
-6. 确认面板显示：
-   - `connected=true`
-   - `decoded` 数量正常
-   - `missing` 和 `decodeError` 可接受或为 0
-7. 点击 **启动离线语音服务**。
-8. 使用语音查询：
-   - 小车小车，当前车速多少
-   - 小车小车，电量多少
-   - 小车小车，最近障碍物
-   - 小车小车，当前协作场景是什么
-   - 小车小车，现在有几辆协作车
-   - 小车小车，Redis 状态
-9. 在目标车载 Android 设备上按同样方式配置车辆数据连接。
+1. 设备连接车辆网络和互联网；若选择系统 TTS，只需车辆网络。
+2. 安装并打开 APK，填写 Redis IP、端口和 DB。
+3. 选择 TTS：
+   - **Edge 在线语音**：默认选项，无需注册。
+   - **百度在线语音 / 腾讯云在线语音**：先导入自己的 `tts-config.json`。
+   - **Android 系统语音**：设备已安装中文 TTS 时可用。
+4. 点击 **试听当前语音**。
+5. 点击 **检测车辆数据连接**，确认 `connected=true` 且解码状态正常。
+6. 点击 **启动语音服务**，说“小车小车，当前车速多少”等查询。
+
+## TTS 配置文件
+
+复制根目录的 [`tts-config.example.json`](tts-config.example.json)，填入自己申请的凭据并删除不用的供应商段，然后在应用内点击 **导入 TTS 配置文件**。不要把真实配置提交到 Git；`tts-config.json` 已加入 `.gitignore`。
+
+```json
+{
+  "version": 1,
+  "defaultProvider": "baidu",
+  "baidu": {
+    "appId": "实际 App ID",
+    "apiKey": "实际 API Key",
+    "secretKey": "实际 Secret Key",
+    "voice": 0,
+    "speed": 5,
+    "pitch": 5,
+    "volume": 9
+  }
+}
+```
+
+`defaultProvider` 可取 `edge`、`baidu`、`tencent` 或 `system`。应用不需要自建服务器；设备会直接请求所选服务。Edge 使用浏览器朗读接口，不提供可承诺的 SLA，接口变化时会自动回退系统 TTS。百度、腾讯云是否免费及额度以各自账号当时的控制台为准。
 
 ## 本地模拟 Redis
 
-电脑侧启动模拟 Redis：
-
 ```bash
 SIM_REDIS_HOST=0.0.0.0 SIM_REDIS_PORT=6379 bash scripts/start_sim_redis.sh
-```
-
-写入默认 protobuf 数据：
-
-```bash
 python3 scripts/sim_vehicle_redis.py --host 127.0.0.1 --port 6379 defaults
 ```
 
-设置协作场景：
+## 开发验证
 
 ```bash
-python3 scripts/sim_vehicle_redis.py --host 127.0.0.1 --port 6379 set-sam --scene 11 --event start --count 3
-```
-
-## 开发验证命令
-
-```bash
-./gradlew :app:testDebugUnitTest
-./gradlew :app:assembleDebug
+./gradlew :app:testDebugUnitTest :app:testReleaseUnitTest :app:lintRelease
+RUN_ONLINE_TTS_TESTS=1 ./gradlew :app:testDebugUnitTest --tests 'com.company.vehiclevoice.tts.*'
+./gradlew :app:assembleDebug :app:assembleRelease
 scripts/check_apk_permissions.sh
 scripts/smoke_sim_redis.sh
 git diff --check
 ```
 
-Debug APK：
+Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。
 
-```text
-app/build/outputs/apk/debug/app-debug.apk
-```
+## 重要边界
 
-## 重要说明
-
-- 当前阶段只读车辆状态，不发真实车辆控制命令。
-- `INTERNET` 权限是有意加入，用于手机 / 车载屏幕读取车辆或电脑 Redis。
-- ASR 与主 TTS 均在应用内离线运行，不使用云 ASR/TTS；系统 TTS 仅为可选备用。
-- v1.3 已随 APK 打包 sherpa-onnx 运行库、24 kHz Kokoro INT8 中英模型和重制提示音，目标设备不需要 Play 商店或额外 TTS 配置。
-- Vosk restricted grammar 暂不启用；中文整句 grammar 已验证会导致 `[unk]`，当前采用开放 ASR + NLU 领域纠错。
+- `INTERNET` 权限用于只读 Redis 和所选在线 TTS；ASR 音频不会上传。
+- 选择在线 TTS 时，本次要播报的回答文字会发送给对应供应商。
+- Edge 无需密钥；百度、腾讯云凭据必须由使用者自行注册和管理。本仓库与 Release 均不包含真实 API 密钥。
+- Vosk restricted grammar 暂不启用；中文整句 grammar 会导致 `[unk]`，当前采用开放 ASR 加 NLU 领域纠错。
 
 ## 文档入口
 
-- 开发与联调环境配置：`docs/development-environment.md`
-- 阶段二交接：`docs/phase2-read-only-vehicle-voice-handoff-2026-06-08.md`
-- 阶段二测试记录：`docs/phase2-e2e-test-run-2026-06-08.md`
-- 上车 UI 整理：`docs/stage3-vehicle-test-ui-plan-2026-06-08.md`
-- 接口文档入库：`docs/interface-ingest/2026-06-08/`
-- 架构说明：`docs/architecture.md`
-- 语音链路：`docs/voice-pipeline.md`
-- 第三方软件与模型许可：`THIRD_PARTY_NOTICES.md`
+- 架构说明：[`docs/architecture.md`](docs/architecture.md)
+- v1.4 发布说明：[`docs/releases/v1.4-configurable-online-tts.md`](docs/releases/v1.4-configurable-online-tts.md)
+- 开发环境：[`docs/development-environment.md`](docs/development-environment.md)
+- 语音链路：[`docs/voice-pipeline.md`](docs/voice-pipeline.md)
+- 第三方软件：[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)

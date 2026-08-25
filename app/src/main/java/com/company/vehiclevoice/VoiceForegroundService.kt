@@ -21,45 +21,42 @@ import com.company.vehiclevoice.data.readonly.RedisVehicleSnapshotProvider
 import com.company.vehiclevoice.data.readonly.SocketRedisBinaryDataSource
 import com.company.vehiclevoice.data.readonly.SocketRedisConfig
 import com.company.vehiclevoice.log.AndroidEventLogSink
-import com.company.vehiclevoice.tts.AndroidTtsEngine
-import com.company.vehiclevoice.tts.FallbackTtsEngine
-import com.company.vehiclevoice.tts.FixedPromptPlayer
-import com.company.vehiclevoice.tts.SherpaOfflineTtsEngine
+import com.company.vehiclevoice.tts.TtsProvider
+import com.company.vehiclevoice.tts.createConfiguredTtsEngine
 
 class VoiceForegroundService : Service() {
     private val logSink = AndroidEventLogSink()
     private var controller: VoicePipelineController? = null
     private var currentMode: VoiceRuntimeMode = VoiceRuntimeMode.PreviewMock
     private var currentVehicleSourceConfig: VehicleDataSourceRuntimeConfig = VehicleDataSourceRuntimeConfig()
-    private var currentPreferSystemTts = false
+    private var currentTtsProvider = TtsProvider.Edge
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         VoiceLogger.info("VoiceForegroundService created")
-        controller = newController(currentMode, currentVehicleSourceConfig, currentPreferSystemTts)
+        controller = newController(currentMode, currentVehicleSourceConfig, currentTtsProvider)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val requestedMode = VoiceRuntimeMode.fromWireValue(intent?.getStringExtra(VoiceRuntimeMode.EXTRA_NAME))
         val requestedVehicleSource = vehicleSourceConfigFromIntent(intent)
-        val requestedPreferSystemTts = intent?.getBooleanExtra(
-            EXTRA_PREFER_SYSTEM_TTS,
-            currentPreferSystemTts
-        ) ?: currentPreferSystemTts
+        val requestedTtsProvider = TtsProvider.fromWireValue(
+            intent?.getStringExtra(EXTRA_TTS_PROVIDER) ?: currentTtsProvider.wireValue
+        )
         VoiceLogger.info(
             "VoiceForegroundService start command mode=${requestedMode.wireValue} " +
                 "vehicleSource=${requestedVehicleSource.displayName} " +
-                "tts=${if (requestedPreferSystemTts) "system_first" else "local_first"}"
+                "tts=${requestedTtsProvider.wireValue}"
         )
         if (requestedMode != currentMode || requestedVehicleSource != currentVehicleSourceConfig ||
-            requestedPreferSystemTts != currentPreferSystemTts || controller == null
+            requestedTtsProvider != currentTtsProvider || controller == null
         ) {
             controller?.close()
             currentMode = requestedMode
             currentVehicleSourceConfig = requestedVehicleSource
-            currentPreferSystemTts = requestedPreferSystemTts
-            controller = newController(requestedMode, requestedVehicleSource, requestedPreferSystemTts)
+            currentTtsProvider = requestedTtsProvider
+            controller = newController(requestedMode, requestedVehicleSource, requestedTtsProvider)
         }
         startForegroundForMode(requestedMode, requestedVehicleSource)
         controller?.start()
@@ -78,7 +75,7 @@ class VoiceForegroundService : Service() {
     private fun newController(
         mode: VoiceRuntimeMode,
         vehicleSourceConfig: VehicleDataSourceRuntimeConfig,
-        preferSystemTts: Boolean
+        ttsProvider: TtsProvider
     ): VoicePipelineController = VoicePipelineController(
         pipelineFactory = {
             VoicePipelineFactory.createServicePipeline(
@@ -92,17 +89,7 @@ class VoiceForegroundService : Service() {
                         .onFailure { logSink.warn("Vosk model unavailable: ${it.message}") }
                         .getOrNull()
                 },
-                ttsEngineFactory = {
-                    val prompts = FixedPromptPlayer(this)
-                    FallbackTtsEngine(
-                        embeddedFactory = { SherpaOfflineTtsEngine(this) },
-                        systemFactory = { AndroidTtsEngine(this) },
-                        playFixedPrompt = prompts::playIfKnown,
-                        playUnavailablePrompt = prompts::playUnavailable,
-                        logSink = logSink,
-                        preferSystem = preferSystemTts
-                    )
-                },
+                ttsEngineFactory = { createConfiguredTtsEngine(this, ttsProvider, logSink) },
                 readOnlySnapshotProviderFactory = { readOnlySnapshotProvider(vehicleSourceConfig) }
             )
         },
@@ -194,7 +181,7 @@ class VoiceForegroundService : Service() {
     }
 
     companion object {
-        const val EXTRA_PREFER_SYSTEM_TTS = "com.company.vehiclevoice.EXTRA_PREFER_SYSTEM_TTS"
+        const val EXTRA_TTS_PROVIDER = "com.company.vehiclevoice.EXTRA_TTS_PROVIDER"
         private const val CHANNEL_ID = "vehicle_voice_service"
         private const val NOTIFICATION_ID = 1001
     }
