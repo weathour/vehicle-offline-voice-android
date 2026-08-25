@@ -1,6 +1,24 @@
+import java.util.zip.GZIPInputStream
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+}
+
+val kokoroModelId = "kokoro-int8-multi-lang-v1_1"
+val kokoroSourceDir = layout.projectDirectory.dir("src/main/tts-model/$kokoroModelId")
+val kokoroAssetsDir = layout.buildDirectory.dir("generated/kokoroAssets")
+val prepareKokoroAssets by tasks.registering(Sync::class) {
+    inputs.file(kokoroSourceDir.file("model.int8.onnx.gz"))
+    from(kokoroSourceDir) { exclude("model.int8.onnx.gz", "SHA256SUMS") }
+    into(kokoroAssetsDir.map { it.dir("tts/$kokoroModelId") })
+    doLast {
+        val output = kokoroAssetsDir.get().file("tts/$kokoroModelId/model.int8.onnx").asFile
+        output.parentFile.mkdirs()
+        GZIPInputStream(kokoroSourceDir.file("model.int8.onnx.gz").asFile.inputStream().buffered()).use { input ->
+            output.outputStream().buffered().use(input::copyTo)
+        }
+    }
 }
 
 android {
@@ -11,8 +29,8 @@ android {
         applicationId = "cn.edu.chd.yuxingvoice"
         minSdk = 26
         targetSdk = 35
-        versionCode = 12
-        versionName = "v1.2"
+        versionCode = 13
+        versionName = "v1.3"
 
         testInstrumentationRunner = "android.app.Instrumentation"
     }
@@ -39,7 +57,11 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    sourceSets["main"].assets.srcDir(kokoroAssetsDir)
 }
+
+tasks.named("preBuild").configure { dependsOn(prepareKokoroAssets) }
 
 dependencies {
     implementation(files("libs/sherpa-onnx-static-link-onnxruntime-1.13.6.aar"))

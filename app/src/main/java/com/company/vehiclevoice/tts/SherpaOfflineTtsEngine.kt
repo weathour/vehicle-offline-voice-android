@@ -5,10 +5,14 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import android.os.SystemClock
+import com.company.vehiclevoice.copyAssetTree
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
+import com.k2fsa.sherpa.onnx.OfflineTtsKokoroModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
-import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
+import java.io.File
+import kotlin.math.abs
+import kotlin.math.sqrt
 
 class SherpaOfflineTtsEngine(
     context: Context,
@@ -16,20 +20,24 @@ class SherpaOfflineTtsEngine(
     private val speed: Float = DEFAULT_SPEED,
     numThreads: Int = DEFAULT_NUM_THREADS
 ) : TtsEngine, AutoCloseable {
+    private val appContext = context.applicationContext
+    private val espeakDataDir = ensureEspeakDataDir(appContext)
     private val tts = OfflineTts(
-        assetManager = context.applicationContext.assets,
+        assetManager = appContext.assets,
         config = OfflineTtsConfig(
             model = OfflineTtsModelConfig(
-                vits = OfflineTtsVitsModelConfig(
-                    model = "$MODEL_DIR/model.onnx",
-                    lexicon = "$MODEL_DIR/lexicon.txt",
-                    tokens = "$MODEL_DIR/tokens.txt"
+                kokoro = OfflineTtsKokoroModelConfig(
+                    model = "$MODEL_DIR/model.int8.onnx",
+                    voices = "$MODEL_DIR/voices.bin",
+                    tokens = "$MODEL_DIR/tokens.txt",
+                    dataDir = espeakDataDir.absolutePath,
+                    lexicon = "$MODEL_DIR/lexicon-us-en.txt,$MODEL_DIR/lexicon-zh.txt"
                 ),
                 numThreads = numThreads,
                 debug = false,
                 provider = "cpu"
             ),
-            ruleFsts = listOf("phone.fst", "date.fst", "number.fst")
+            ruleFsts = listOf("phone-zh.fst", "date-zh.fst", "number-zh.fst")
                 .joinToString(",") { "$MODEL_DIR/$it" }
         )
     )
@@ -52,7 +60,7 @@ class SherpaOfflineTtsEngine(
         val audio = tts.generate(speechText, sid = speakerId, speed = speed)
         check(audio.samples.isNotEmpty()) { "Embedded TTS generated no audio" }
         check(audio.sampleRate > 0) { "Embedded TTS returned an invalid sample rate" }
-        play(audio.samples, audio.sampleRate)
+        play(normalizeTtsSamples(audio.samples), audio.sampleRate)
     }
 
     @Synchronized
@@ -107,14 +115,52 @@ class SherpaOfflineTtsEngine(
     }
 
     companion object {
-        const val MODEL_ID = "vits-icefall-zh-aishell3"
+        const val MODEL_ID = "kokoro-int8-multi-lang-v1_1"
         const val ENGINE_VERSION = "1.13.6"
-        const val DEFAULT_SPEAKER_ID = 66
+        const val DEFAULT_SPEAKER_ID = 3
         const val DEFAULT_SPEED = 1.0f
-        const val DEFAULT_NUM_THREADS = 2
+        const val DEFAULT_NUM_THREADS = 4
 
         private const val MODEL_DIR = "tts/$MODEL_ID"
         private const val PLAYBACK_POLL_MS = 20L
         private const val PLAYBACK_TAIL_TIMEOUT_MS = 2_000L
+
+        @Synchronized
+        private fun ensureEspeakDataDir(context: Context): File {
+            val target = File(context.filesDir, "$MODEL_DIR/espeak-ng-data")
+            val marker = File(target.parentFile, "espeak-ng-data.complete")
+            val requiredFiles = listOf("phondata", "phonindex", "phontab", "cmn_dict", "en_dict")
+            if (runCatching { marker.readText() }.getOrNull() == ENGINE_VERSION &&
+                requiredFiles.all { File(target, it).isFile }
+            ) return target
+            copyAssetTree(context, "$MODEL_DIR/espeak-ng-data", target)
+            check(requiredFiles.all { File(target, it).isFile }) {
+                "Embedded TTS eSpeak data copy is incomplete"
+            }
+            marker.writeText(ENGINE_VERSION)
+            return target
+        }
     }
 }
+
+internal fun normalizeTtsSamples(samples: FloatArray): FloatArray {
+    if (samples.isEmpty()) return samples
+    var peak = 0f
+    var sumSquares = 0.0
+    samples.forEach { sample ->
+        check(sample.isFinite()) { "Embedded TTS generated a non-finite sample" }
+        peak = maxOf(peak, abs(sample))
+        sumSquares += sample * sample
+    }
+    val rms = sqrt(sumSquares / samples.size).toFloat()
+    if (rms < 0.001f || peak == 0f) return samples
+    val gain = minOf(MAX_VOLUME_GAIN, TARGET_RMS / rms, TARGET_PEAK / peak)
+    samples.indices.forEach { index ->
+        samples[index] = (samples[index] * gain).coerceIn(-TARGET_PEAK, TARGET_PEAK)
+    }
+    return samples
+}
+
+private const val TARGET_RMS = 0.14f
+private const val TARGET_PEAK = 0.92f
+private const val MAX_VOLUME_GAIN = 3.0f

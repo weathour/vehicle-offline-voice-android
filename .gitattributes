@@ -1,5 +1,6 @@
 .gitattributes text eol=lf
 app/src/main/assets/model-cn/** -text
+app/src/main/tts-model/** -text -diff
 docs/interface-ingest/**/*.proto text eol=lf
 docs/interface-ingest/**/*.md text eol=lf
 docs/interface-ingest/**/*.json text eol=lf

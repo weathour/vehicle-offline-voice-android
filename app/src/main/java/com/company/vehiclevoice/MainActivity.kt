@@ -16,6 +16,8 @@ import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
 import com.company.vehiclevoice.data.readonly.RedisVehicleSnapshotProvider
@@ -24,7 +26,12 @@ import com.company.vehiclevoice.data.readonly.VehicleDataSourceRuntimeConfig
 import com.company.vehiclevoice.core.VoiceRuntimeMode
 import com.company.vehiclevoice.data.readonly.SocketRedisBinaryDataSource
 import com.company.vehiclevoice.data.readonly.SocketRedisConfig
+import com.company.vehiclevoice.log.AndroidEventLogSink
 import com.company.vehiclevoice.nlu.AskableVoiceContent
+import com.company.vehiclevoice.tts.AndroidTtsEngine
+import com.company.vehiclevoice.tts.FallbackTtsEngine
+import com.company.vehiclevoice.tts.FixedPromptPlayer
+import com.company.vehiclevoice.tts.SherpaOfflineTtsEngine
 import kotlin.concurrent.thread
 
 class MainActivity : Activity() {
@@ -47,6 +54,7 @@ class MainActivity : Activity() {
     private lateinit var redisDbInput: EditText
     private lateinit var redisPasswordInput: EditText
     private lateinit var connectionPanel: TextView
+    private lateinit var systemTtsRadioButton: RadioButton
     private lateinit var developerPanel: LinearLayout
     private lateinit var developerToggleButton: Button
     private var pendingStartAfterPermission = false
@@ -95,10 +103,11 @@ class MainActivity : Activity() {
         }
         root.addView(title)
         root.addView(TextView(this).apply {
-            text = "使用流程：连接车辆网络 → 配置 Redis → 检测数据连接 → 启动离线语音服务"
+            text = "使用流程：连接车辆网络 → 配置 Redis → 选择语音 → 检测连接 → 启动服务"
             textSize = 13f
         })
         root.addView(buildRedisConfigPanel())
+        root.addView(buildTtsPanel())
 
         root.addView(Button(this).apply {
             text = "1. 检测车辆数据连接"
@@ -215,6 +224,43 @@ class MainActivity : Activity() {
         panel.addView(redisPasswordInput)
         panel.addView(TextView(this).apply {
             text = "设备必须与车辆 Redis 位于同一网络。连接检测通过后即可启动语音服务。"
+            textSize = 12f
+        })
+        return panel
+    }
+
+    private fun buildTtsPanel(): LinearLayout {
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 4, 0, 16)
+        }
+        panel.addView(TextView(this).apply {
+            text = "语音播报"
+            textSize = 16f
+            setTypeface(typeface, Typeface.BOLD)
+        })
+        val local = RadioButton(this).apply {
+            text = "高质量本地语音（推荐，离线可用）"
+            minimumHeight = dp(48)
+        }
+        systemTtsRadioButton = RadioButton(this).apply {
+            text = "Android 系统语音（不可用时自动回退本地）"
+            minimumHeight = dp(48)
+        }
+        val group = RadioGroup(this).apply {
+            orientation = RadioGroup.VERTICAL
+            addView(local)
+            addView(systemTtsRadioButton)
+        }
+        if (loadBoolean(PREF_SYSTEM_TTS, false)) systemTtsRadioButton.isChecked = true else local.isChecked = true
+        group.setOnCheckedChangeListener { _, _ -> saveTtsPreference() }
+        panel.addView(group)
+        panel.addView(Button(this).apply {
+            text = "试听当前语音"
+            setOnClickListener { previewTts(this) }
+        })
+        panel.addView(TextView(this).apply {
+            text = "本地语音使用 24 kHz Kokoro 中英双语模型；切换后下次启动服务生效。"
             textSize = 12f
         })
         return panel
@@ -414,6 +460,7 @@ class MainActivity : Activity() {
         saveRedisConfig()
         val intent = Intent(this, VoiceForegroundService::class.java)
             .putExtra(VoiceRuntimeMode.EXTRA_NAME, mode.wireValue)
+            .putExtra(VoiceForegroundService.EXTRA_PREFER_SYSTEM_TTS, systemTtsRadioButton.isChecked)
             .putExtra(VehicleDataSourceRuntimeConfig.EXTRA_SOURCE_MODE, sourceConfig.mode.wireValue)
             .putExtra(VehicleDataSourceRuntimeConfig.EXTRA_REDIS_HOST, sourceConfig.host)
             .putExtra(VehicleDataSourceRuntimeConfig.EXTRA_REDIS_PORT, sourceConfig.port)
@@ -425,9 +472,51 @@ class MainActivity : Activity() {
         } else {
             startService(intent)
         }
-        appendLog("已发送启动前台服务命令：${mode.displayName}；车况数据源：${sourceConfig.displayName}")
+        appendLog(
+            "已发送启动前台服务命令：${mode.displayName}；车况数据源：${sourceConfig.displayName}；" +
+                "语音：${selectedTtsName()}"
+        )
         statusPanel.text = "状态：启动命令已发送 ${mode.displayName} / ${sourceConfig.displayName}"
     }
+
+    private fun previewTts(button: Button) {
+        saveTtsPreference()
+        val preferSystemTts = systemTtsRadioButton.isChecked
+        val ttsName = selectedTtsName()
+        button.isEnabled = false
+        statusPanel.text = "状态：正在加载并试听$ttsName"
+        thread(name = "vehicle-tts-preview") {
+            val result = runCatching {
+                val prompts = FixedPromptPlayer(this)
+                val engine = FallbackTtsEngine(
+                    embeddedFactory = { SherpaOfflineTtsEngine(this) },
+                    systemFactory = { AndroidTtsEngine(this) },
+                    playFixedPrompt = prompts::playIfKnown,
+                    playUnavailablePrompt = prompts::playUnavailable,
+                    logSink = AndroidEventLogSink(),
+                    preferSystem = preferSystemTts
+                )
+                try {
+                    engine.speak(TTS_PREVIEW_TEXT)
+                } finally {
+                    engine.close()
+                }
+            }
+            runOnUiThread {
+                button.isEnabled = true
+                result.onSuccess {
+                    statusPanel.text = "状态：试听完成 $ttsName"
+                    appendLog("TTS 试听完成：$ttsName")
+                }.onFailure { throwable ->
+                    statusPanel.text = "状态：试听失败 ${throwable.message}"
+                    appendLog("TTS 试听失败：${throwable.message}")
+                }
+            }
+        }
+    }
+
+    private fun selectedTtsName(): String =
+        if (systemTtsRadioButton.isChecked) "Android 系统语音" else "高质量本地语音"
 
     private fun selectedVehicleSourceConfig(): VehicleDataSourceRuntimeConfig {
         val host = redisHostInput.text.toString().trim().ifBlank { VehicleDataSourceRuntimeConfig.DEFAULT_REMOTE_HOST }
@@ -512,8 +601,17 @@ class MainActivity : Activity() {
         editor.apply()
     }
 
+    private fun saveTtsPreference() {
+        getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(PREF_SYSTEM_TTS, systemTtsRadioButton.isChecked)
+            .apply()
+    }
+
     private fun loadString(key: String, fallback: String): String =
         getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(key, fallback) ?: fallback
+
+    private fun loadBoolean(key: String, fallback: Boolean): Boolean =
+        getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(key, fallback)
 
     override fun onRequestPermissionsResult(
         requestCode: Int,
@@ -555,5 +653,8 @@ class MainActivity : Activity() {
         private const val PREF_REDIS_PORT = "redis_port"
         private const val PREF_REDIS_DB = "redis_db"
         private const val PREF_REDIS_PASSWORD = "redis_password"
+        private const val PREF_SYSTEM_TTS = "prefer_system_tts"
+        private const val TTS_PREVIEW_TEXT =
+            "语音测试。当前车速三十二公里每小时，V2X connection is ready，Redis data is normal。"
     }
 }

@@ -61,6 +61,24 @@ class FallbackTtsEngineTest {
         assertEquals(1, unavailablePlayed)
     }
 
+    @Test
+    fun systemPreferenceFallsBackToEmbeddedWhenSystemFails() {
+        val calls = mutableListOf<String>()
+        val engine = FallbackTtsEngine(
+            embeddedFactory = { calls += "embedded"; RecordingTtsEngine() },
+            systemFactory = {
+                calls += "system"
+                RecordingTtsEngine(failure = IllegalStateException("system unavailable"))
+            },
+            logSink = RecordingEventLogSink(),
+            preferSystem = true
+        )
+
+        engine.speak("测试")
+
+        assertEquals(listOf("system", "embedded"), calls)
+    }
+
     private class RecordingTtsEngine(
         private val failure: Throwable? = null
     ) : TtsEngine {

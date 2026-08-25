@@ -31,26 +31,35 @@ class VoiceForegroundService : Service() {
     private var controller: VoicePipelineController? = null
     private var currentMode: VoiceRuntimeMode = VoiceRuntimeMode.PreviewMock
     private var currentVehicleSourceConfig: VehicleDataSourceRuntimeConfig = VehicleDataSourceRuntimeConfig()
+    private var currentPreferSystemTts = false
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         VoiceLogger.info("VoiceForegroundService created")
-        controller = newController(currentMode, currentVehicleSourceConfig)
+        controller = newController(currentMode, currentVehicleSourceConfig, currentPreferSystemTts)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val requestedMode = VoiceRuntimeMode.fromWireValue(intent?.getStringExtra(VoiceRuntimeMode.EXTRA_NAME))
         val requestedVehicleSource = vehicleSourceConfigFromIntent(intent)
+        val requestedPreferSystemTts = intent?.getBooleanExtra(
+            EXTRA_PREFER_SYSTEM_TTS,
+            currentPreferSystemTts
+        ) ?: currentPreferSystemTts
         VoiceLogger.info(
             "VoiceForegroundService start command mode=${requestedMode.wireValue} " +
-                "vehicleSource=${requestedVehicleSource.displayName}"
+                "vehicleSource=${requestedVehicleSource.displayName} " +
+                "tts=${if (requestedPreferSystemTts) "system_first" else "local_first"}"
         )
-        if (requestedMode != currentMode || requestedVehicleSource != currentVehicleSourceConfig || controller == null) {
+        if (requestedMode != currentMode || requestedVehicleSource != currentVehicleSourceConfig ||
+            requestedPreferSystemTts != currentPreferSystemTts || controller == null
+        ) {
             controller?.close()
             currentMode = requestedMode
             currentVehicleSourceConfig = requestedVehicleSource
-            controller = newController(requestedMode, requestedVehicleSource)
+            currentPreferSystemTts = requestedPreferSystemTts
+            controller = newController(requestedMode, requestedVehicleSource, requestedPreferSystemTts)
         }
         startForegroundForMode(requestedMode, requestedVehicleSource)
         controller?.start()
@@ -68,7 +77,8 @@ class VoiceForegroundService : Service() {
 
     private fun newController(
         mode: VoiceRuntimeMode,
-        vehicleSourceConfig: VehicleDataSourceRuntimeConfig
+        vehicleSourceConfig: VehicleDataSourceRuntimeConfig,
+        preferSystemTts: Boolean
     ): VoicePipelineController = VoicePipelineController(
         pipelineFactory = {
             VoicePipelineFactory.createServicePipeline(
@@ -89,7 +99,8 @@ class VoiceForegroundService : Service() {
                         systemFactory = { AndroidTtsEngine(this) },
                         playFixedPrompt = prompts::playIfKnown,
                         playUnavailablePrompt = prompts::playUnavailable,
-                        logSink = logSink
+                        logSink = logSink,
+                        preferSystem = preferSystemTts
                     )
                 },
                 readOnlySnapshotProviderFactory = { readOnlySnapshotProvider(vehicleSourceConfig) }
@@ -183,6 +194,7 @@ class VoiceForegroundService : Service() {
     }
 
     companion object {
+        const val EXTRA_PREFER_SYSTEM_TTS = "com.company.vehiclevoice.EXTRA_PREFER_SYSTEM_TTS"
         private const val CHANNEL_ID = "vehicle_voice_service"
         private const val NOTIFICATION_ID = 1001
     }

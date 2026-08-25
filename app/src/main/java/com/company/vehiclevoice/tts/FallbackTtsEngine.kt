@@ -7,12 +7,13 @@ class FallbackTtsEngine(
     systemFactory: () -> TtsEngine,
     private val playFixedPrompt: (String) -> Boolean = { false },
     private val playUnavailablePrompt: (() -> Unit)? = null,
-    private val logSink: EventLogSink
+    private val logSink: EventLogSink,
+    preferSystem: Boolean = false
 ) : TtsEngine, AutoCloseable {
     private val backends = listOf(
         Backend("embedded", embeddedFactory),
         Backend("system", systemFactory)
-    )
+    ).let { if (preferSystem) it.reversed() else it }
     private var closed = false
 
     @Synchronized

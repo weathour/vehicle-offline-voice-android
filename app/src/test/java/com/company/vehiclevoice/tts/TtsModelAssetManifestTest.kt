@@ -5,28 +5,40 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.security.MessageDigest
+import kotlin.math.sqrt
 
 class TtsModelAssetManifestTest {
     @Test
     fun committedOfflineTtsArtifactsMatchManifest() {
-        val modelDir = File("src/main/assets/tts/${SherpaOfflineTtsEngine.MODEL_ID}")
+        val modelDir = File("src/main/tts-model/${SherpaOfflineTtsEngine.MODEL_ID}")
         val manifest = File(modelDir, "MODEL_MANIFEST.json").readText()
-        val entries = Regex(
-            """\{\s*"path"\s*:\s*"(.*?)".*?"sha256"\s*:\s*"(.*?)".*?"bytes"\s*:\s*(\d+)""",
-            RegexOption.DOT_MATCHES_ALL
-        ).findAll(manifest).map { match ->
-            Triple(match.groupValues[1], match.groupValues[2], match.groupValues[3].toLong())
-        }.toList()
+        val sums = File(modelDir, "SHA256SUMS")
+        val entries = sums.readLines().map { line ->
+            line.substringBefore("  ") to line.substringAfter("  ")
+        }
 
-        assertEquals(6, entries.size)
-        entries.forEach { (path, expectedSha, expectedBytes) ->
+        assertEquals(261, entries.size)
+        entries.forEach { (expectedSha, path) ->
             val file = File(modelDir, path)
             assertTrue("Missing TTS asset: $path", file.isFile)
-            assertEquals("Unexpected size for $path", expectedBytes, file.length())
             assertEquals("Unexpected SHA-256 for $path", expectedSha, sha256(file))
         }
-        assertFalse(File(modelDir, "rule.far").exists())
+        assertTrue(manifest.contains(sha256(sums)))
+        assertTrue(manifest.contains("\"sample_rate_hz\": 24000"))
+        assertTrue(manifest.contains("\"languages\": [\"zh-CN\", \"en-US\"]"))
+        assertFalse(File("src/main/assets/tts/vits-icefall-zh-aishell3").exists())
+
+        val packagedModel = File(
+            "build/generated/kokoroAssets/tts/${SherpaOfflineTtsEngine.MODEL_ID}/model.int8.onnx"
+        )
+        assertEquals(114_299_010L, packagedModel.length())
+        assertEquals(
+            "bda15858163726a492d02a9a727bc263551b86ac77f90812c4b30ff41d380e26",
+            sha256(packagedModel)
+        )
 
         val aar = File("libs/sherpa-onnx-static-link-onnxruntime-${SherpaOfflineTtsEngine.ENGINE_VERSION}.aar")
         assertTrue(aar.isFile)
@@ -41,8 +53,21 @@ class TtsModelAssetManifestTest {
         listOf("voice_wake_ack.wav", "voice_tts_unavailable.wav").forEach { name ->
             val file = File("src/main/res/raw/$name")
             assertTrue(file.length() > 44)
-            assertEquals("RIFF", file.inputStream().use { String(it.readNBytes(4), Charsets.US_ASCII) })
+            val header = file.inputStream().use { it.readNBytes(28) }
+            assertEquals("RIFF", String(header.copyOfRange(0, 4), Charsets.US_ASCII))
+            assertEquals(24_000, ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN).getInt(24))
         }
+    }
+
+    @Test
+    fun playbackNormalizationRaisesQuietSpeechWithoutClipping() {
+        val samples = FloatArray(1_000) { if (it % 2 == 0) 0.05f else -0.05f }
+
+        normalizeTtsSamples(samples)
+
+        val rms = sqrt(samples.sumOf { (it * it).toDouble() } / samples.size)
+        assertEquals(0.14, rms, 0.001)
+        assertTrue(samples.all { it in -0.92f..0.92f })
     }
 
     private fun sha256(file: File): String {

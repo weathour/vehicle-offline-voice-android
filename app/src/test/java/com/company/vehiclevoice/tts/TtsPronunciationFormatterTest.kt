@@ -19,15 +19,14 @@ class TtsPronunciationFormatterTest {
     }
 
     @Test
-    fun formatsEngineeringTermsForChineseOnlyModel() {
+    fun formatsEngineeringTermsWithoutDestroyingEnglish() {
         val speech = TtsPronunciationFormatter.forSpeech(
-            "Redis schema，SOC85%，RTK、ACC、LKA、TPMS、SAM，来源BC_Veh_Spd"
+            "Redis schema is ready，SOC85%，RTK、ACC、LKA、TPMS、SAM，来源BC_Veh_Spd"
         )
 
-        assertTrue(speech.contains("瑞迪丝 数据结构"))
+        assertTrue(speech.contains("Redis schema is ready"))
         assertTrue(speech.contains("电池荷电状态百分之85"))
         assertTrue(speech.contains("阿尔提开、自适应巡航、车道保持辅助、胎压监测、萨姆"))
-        assertFalse(speech.any { it in 'A'..'Z' || it in 'a'..'z' })
         assertFalse(speech.contains('_'))
     }
 }

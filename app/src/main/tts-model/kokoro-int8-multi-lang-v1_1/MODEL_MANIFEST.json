@@ -1,0 +1,28 @@
+{
+  "model": "kokoro-int8-multi-lang-v1_1",
+  "upstream_model": "hexgrad/Kokoro-82M-v1.1-zh",
+  "source_url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_1.tar.bz2",
+  "source_archive_sha256": "a1e94694776049035c4f2c6529f003aaece993c76aae9a78995831c3c4dcafc6",
+  "license": "Apache-2.0",
+  "languages": ["zh-CN", "en-US"],
+  "sample_rate_hz": 24000,
+  "speakers": 103,
+  "default_speaker_id": 3,
+  "default_speaker_name": "zf_001",
+  "engine": "sherpa-onnx",
+  "engine_version": "1.13.6",
+  "engine_aar_sha256": "01e87037afca2ed49085062aace5c012e60321e8e23e3a72b6d9ac02c843f66c",
+  "source_payload_files": 261,
+  "source_payload_sha256s_sha256": "3ca3b61757bed1a69e992bfc4e80d40954b30d3fb93c84ef4fa6adb203b398c0",
+  "compressed_model": {
+    "path": "model.int8.onnx.gz",
+    "sha256": "a0f2a2bce5a05224381c6cdb10f655d2efd8a7d8bce6582fc35211d74442cc87",
+    "bytes": 89058773
+  },
+  "packaged_model": {
+    "path": "model.int8.onnx",
+    "sha256": "bda15858163726a492d02a9a727bc263551b86ac77f90812c4b30ff41d380e26",
+    "bytes": 114299010
+  },
+  "packaging_note": "Gradle expands the gzip model into generated APK assets; espeak voice-effect variants under voices/!v are intentionally omitted."
+}
