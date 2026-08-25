@@ -26,4 +26,16 @@ class ManifestPolicyTest {
         assertTrue(saveFunction.contains("if (isDebugBuild)"))
         assertTrue(saveFunction.substringAfter("} else {").contains("editor.remove(PREF_REDIS_PASSWORD)"))
     }
+
+    @Test
+    fun releasePath_showsLatestAsrTranscript() {
+        val source = File("src/main/java/com/company/vehiclevoice/MainActivity.kt").readText()
+        val releaseSurface = source.substringAfter("private fun buildContentView()")
+            .substringBefore("val debugPanel = buildDebugPanel()")
+
+        assertTrue(releaseSurface.contains("asrPanel = debugLine(\"最近听到\", \"尚无识别结果\")"))
+        assertTrue(releaseSurface.contains("root.addView(asrPanel)"))
+        assertTrue(source.contains("if (\"ASR text=\" in line)"))
+        assertTrue(source.contains("未识别到语音"))
+    }
 }

@@ -117,6 +117,71 @@ class ReadOnlyVehicleQueryIntentTest {
     }
 
     @Test
+    fun distinctiveStandaloneSoundsTriggerReadOnlyQueries() {
+        val cases = mapOf(
+            "车素" to "vehicle_speed_query",
+            "党" to "vehicle_gear_query",
+            "店量" to "vehicle_battery_query",
+            "电驰" to "vehicle_battery_detail_query",
+            "序行" to "vehicle_range_query",
+            "空条" to "vehicle_ac_query",
+            "问度" to "vehicle_temperature_query",
+            "车们" to "vehicle_door_query",
+            "瑞迪丝" to "vehicle_data_health_query",
+            "缓冲" to "vehicle_data_health_query",
+            "时间错" to "vehicle_data_freshness_query",
+            "阿踢凯" to "vehicle_rtk_query",
+            "位子" to "vehicle_location_query",
+            "自太" to "vehicle_pose_query",
+            "张碍物" to "vehicle_obstacle_query",
+            "归迹" to "vehicle_trajectory_query",
+            "胎呀" to "vehicle_tire_query",
+            "智架" to "vehicle_intelligent_status_query",
+            "艾尔二" to "vehicle_intelligent_status_query",
+            "艾斯欧西" to "vehicle_battery_query",
+            "诶西西" to "vehicle_acc_query",
+            "艾勒开诶" to "vehicle_lka_query",
+            "车到保持" to "vehicle_lka_query",
+            "借管" to "vehicle_takeover_query",
+            "告井" to "vehicle_fault_query",
+            "赛姆" to "vehicle_sam_status_query",
+            "写作常见" to "vehicle_cooperation_scene_query",
+            "微二艾克斯" to "vehicle_cooperation_scene_query",
+            "写作车" to "vehicle_cooperation_count_query",
+            "车况" to "status_query",
+            "请帮我查一下车素" to "vehicle_speed_query",
+            "报党" to "vehicle_gear_query",
+            "告诉我瑞迪丝" to "vehicle_data_health_query",
+            "看看写作常见" to "vehicle_cooperation_scene_query",
+            "问胎呀" to "vehicle_tire_query"
+        )
+
+        cases.forEach { (text, intent) ->
+            val result = parser.parse(text)
+            assertEquals(text, intent, result.intent.name)
+            assertEquals(text, "distinctive_alias", result.reason)
+            assertFalse(text, result.isActionable)
+        }
+    }
+
+    @Test
+    fun genericSingleSoundsDoNotTriggerAnIntent() {
+        listOf("车", "电", "门", "灯", "状态", "场景", "结果", "反馈", "可以", "打开", "不要看车速").forEach { text ->
+            val result = parser.parse(text)
+            assertEquals(text, "fallback", result.intent.name)
+            assertFalse(text, result.isActionable)
+        }
+    }
+
+    @Test
+    fun unsafeTextWinsOverDistinctiveAlias() {
+        val result = parser.parse("上传车速")
+
+        assertEquals("unsafe_rejected", result.intent.name)
+        assertFalse(result.isActionable)
+    }
+
+    @Test
     fun cooperationAsrCorrectionDoesNotTurnUnrelatedWritingIntoVehicleIntent() {
         val result = parser.parse("写作文章")
 

@@ -7,6 +7,14 @@ class RuleIntentParser : IntentParser {
         if (containsUnsafeText(normalized)) {
             return ParseResult(VoiceIntent.Unsafe, replyKey = "unsafe_rejected", confidence = 1.0, reason = "unsafe_text")
         }
+        val distinctiveQuery = DISTINCTIVE_READ_ONLY_QUERIES[normalized]
+            ?: DISTINCTIVE_QUERY_PREFIXES.firstNotNullOfOrNull { prefix ->
+                normalized.removePrefix(prefix).takeIf { it != normalized }
+                    ?.let(DISTINCTIVE_READ_ONLY_QUERIES::get)
+            }
+        distinctiveQuery?.let { (intent, target) ->
+            return query(intent, target).copy(reason = "distinctive_alias")
+        }
 
         return when {
             matchesAny(normalized, "打开空调", "开启空调", "开空调", "空调打开", "把空调打开", "空调开开", "开下空调") ->
@@ -131,7 +139,7 @@ class RuleIntentParser : IntentParser {
                 (hasAny(normalized, COOPERATION_TERMS) && hasAny(normalized, listOf("车", "车辆")) && hasAny(normalized, listOf("几", "多少", "数量", "几个"))) ->
                 query("vehicle_cooperation_count_query", "cooperation_count")
             matchesAny(normalized, "引导决策", "协作反馈", "反馈结果", "当前协作行为", "协作行为是什么", "协作决策") ||
-                (hasAny(normalized, COOPERATION_TERMS + DECISION_TERMS) && hasAny(normalized, listOf("引导", "决策", "反馈", "结果", "行为", "当前", "现在", "什么"))) ->
+                (hasAny(normalized, COOPERATION_TERMS) && hasAny(normalized, DECISION_TERMS + listOf("当前", "现在", "什么"))) ->
                 query("vehicle_cooperation_decision_query", "cooperation_decision")
             matchesAny(
                 normalized,
@@ -208,10 +216,10 @@ class RuleIntentParser : IntentParser {
             // offline Chinese ASR. These are still gated by downstream topic+question matching.
             "小撤" to "小车",
             "小彻" to "小车",
-            "车机" to "车机",
-            "车辆" to "车辆",
             "撤辆" to "车辆",
             "彻辆" to "车辆",
+            "撤速" to "车速",
+            "彻速" to "车速",
             "车素" to "车速",
             "车数" to "车速",
             "车宿" to "车速",
@@ -229,11 +237,19 @@ class RuleIntentParser : IntentParser {
             "店量" to "电量",
             "电梁" to "电量",
             "电粮" to "电量",
-            "soc" to "soc",
+            "电驰" to "电池",
+            "电迟" to "电池",
+            "电持" to "电池",
+            "艾斯欧西" to "soc",
+            "诶斯欧西" to "soc",
+            "爱思欧西" to "soc",
             "续行" to "续航",
             "序航" to "续航",
+            "序行" to "续航",
+            "续杭" to "续航",
             "里成" to "里程",
             "历程" to "里程",
+            "里呈" to "里程",
             "空条" to "空调",
             "空跳" to "空调",
             "空掉" to "空调",
@@ -248,6 +264,8 @@ class RuleIntentParser : IntentParser {
             "为止" to "位置",
             "航像" to "航向",
             "航象" to "航向",
+            "姿太" to "姿态",
+            "自太" to "姿态",
             "障爱物" to "障碍物",
             "张碍物" to "障碍物",
             "长碍物" to "障碍物",
@@ -268,17 +286,27 @@ class RuleIntentParser : IntentParser {
             "告紧" to "告警",
             "故章" to "故障",
             "古障" to "故障",
+            "故张" to "故障",
             "制动驾驶" to "自动驾驶",
             "自动加驶" to "自动驾驶",
             "自动加时" to "自动驾驶",
             "智架" to "智驾",
             "支架" to "智驾",
+            "艾尔二" to "l2",
+            "爱尔二" to "l2",
+            "l二" to "l2",
+            "诶西西" to "acc",
+            "艾西西" to "acc",
+            "爱西西" to "acc",
+            "艾勒开诶" to "lka",
+            "艾勒凯诶" to "lka",
+            "艾尔开诶" to "lka",
+            "艾尔凯诶" to "lka",
             "接官" to "接管",
             "借管" to "接管",
             "监管" to "接管",
             "巡行" to "巡航",
             "寻航" to "巡航",
-            "车道保持" to "车道保持",
             "车到保持" to "车道保持",
             "引到" to "引导",
             "引道" to "引导",
@@ -311,21 +339,36 @@ class RuleIntentParser : IntentParser {
             "v突v" to "v2v",
             "v突i" to "v2i",
             "v突x" to "v2x",
+            "微二微" to "v2v",
+            "威二威" to "v2v",
+            "微二爱" to "v2i",
+            "威二爱" to "v2i",
+            "微二艾克斯" to "v2x",
+            "威二艾克斯" to "v2x",
             // Real-vehicle Redis/protobuf debug terms. These improve recognition after ASR
             // without making the parser execute any write/control action.
             "瑞迪斯" to "redis",
             "瑞迪思" to "redis",
             "瑞蒂斯" to "redis",
             "瑞的斯" to "redis",
+            "瑞迪丝" to "redis",
+            "瑞迪士" to "redis",
+            "雷迪斯" to "redis",
             "阿提开" to "rtk",
             "二踢开" to "rtk",
             "二梯开" to "rtk",
             "二提开" to "rtk",
             "啊踢开" to "rtk",
             "阿踢开" to "rtk",
+            "阿提凯" to "rtk",
+            "啊踢凯" to "rtk",
+            "阿踢凯" to "rtk",
+            "二踢凯" to "rtk",
             "三姆" to "sam",
             "山姆" to "sam",
             "萨姆" to "sam",
+            "赛姆" to "sam",
+            "塞姆" to "sam",
             "森萨姆" to "sensorsam",
             "归迹" to "轨迹",
             "规迹" to "轨迹",
@@ -343,6 +386,53 @@ class RuleIntentParser : IntentParser {
             "缓冲" to "缓存",
             "建诊断" to "键诊断",
             "健诊断" to "键诊断"
+        )
+
+        // Exact post-ASR aliases, optionally behind one known query prefix. Generic
+        // one-character sounds stay excluded; 档/挡/党 is the deliberate exception.
+        private val DISTINCTIVE_READ_ONLY_QUERIES = buildMap {
+            fun aliases(intent: String, target: String, vararg words: String) {
+                words.forEach { put(it, intent to target) }
+            }
+
+            aliases("vehicle_data_health_query", "data_health", "redis", "缓存", "数据源")
+            aliases("vehicle_key_diagnostic_query", "key_diagnostic", "key", "解码")
+            aliases("vehicle_data_freshness_query", "data_freshness", "新鲜度", "时间戳")
+            aliases("vehicle_speed_query", "speed", "车速", "速度", "时速")
+            aliases("vehicle_gear_query", "gear", "档位", "档", "挡", "党")
+            aliases("vehicle_battery_query", "battery", "电量", "soc")
+            aliases("vehicle_battery_detail_query", "battery_detail", "电池", "电压", "电流")
+            aliases("vehicle_range_query", "range", "续航", "里程")
+            aliases("vehicle_ac_query", "air_conditioner", "空调", "风机", "制冷", "制热")
+            aliases("vehicle_temperature_query", "temperature", "温度")
+            aliases("vehicle_door_query", "door", "车门", "前门", "中门")
+            aliases("vehicle_rtk_query", "rtk", "rtk")
+            aliases("vehicle_location_query", "location", "位置", "经度", "纬度", "航向")
+            aliases("vehicle_pose_query", "pose", "姿态", "俯仰", "横滚", "高度")
+            aliases("vehicle_obstacle_query", "obstacle", "障碍物", "障碍")
+            aliases("vehicle_obstacle_count_query", "obstacle_count", "障碍数")
+            aliases("vehicle_nearest_obstacle_query", "nearest_obstacle", "最近障碍")
+            aliases("vehicle_trajectory_query", "trajectory", "轨迹", "轨迹点")
+            aliases("vehicle_lane_query", "lane", "车道线", "车道")
+            aliases("vehicle_traffic_light_query", "traffic_light", "红绿灯", "交通灯", "信号灯")
+            aliases("vehicle_tire_query", "tire", "胎压", "轮胎")
+            aliases("vehicle_intelligent_status_query", "intelligent_driving", "智驾", "自驾", "自动驾驶", "l2")
+            aliases("vehicle_acc_query", "acc", "acc", "巡航")
+            aliases("vehicle_lka_query", "lka", "lka", "车道保持")
+            aliases("vehicle_takeover_query", "takeover", "接管")
+            aliases("vehicle_fault_query", "fault", "故障", "告警", "报警", "急停", "异常")
+            aliases("vehicle_sam_status_query", "sam_status", "sam", "sensorsam", "协作模块", "实车协作")
+            aliases("vehicle_cooperation_scene_query", "cooperation_scene", "协作场景", "v2v", "v2i", "v2x")
+            aliases("vehicle_cooperation_event_query", "cooperation_event", "协作事件")
+            aliases("vehicle_cooperation_count_query", "cooperation_count", "协作车")
+            aliases("vehicle_cooperation_decision_query", "cooperation_decision", "协作反馈", "引导", "决策")
+            aliases("status_query", "vehicle_state", "车况")
+        }
+
+        private val DISTINCTIVE_QUERY_PREFIXES = listOf(
+            "帮我查询", "帮我查看", "帮我查", "帮我看",
+            "给我查询", "给我查看", "给我查", "给我看",
+            "告诉我", "查询", "查看", "看看", "播报", "查", "看", "说", "报", "读", "问"
         )
 
         private val COMMON_QUERY_TERMS = listOf("当前", "现在", "多少", "什么", "怎样", "怎么样", "状态", "有没有", "是否", "吗", "正常", "原因", "哪", "哪里")

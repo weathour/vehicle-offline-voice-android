@@ -132,6 +132,10 @@ class MainActivity : Activity() {
 
         connectionPanel = debugLine("连接状态", "未检测")
         root.addView(connectionPanel)
+        asrPanel = debugLine("最近听到", "尚无识别结果").apply {
+            setPadding(0, dp(12), 0, dp(12))
+        }
+        root.addView(asrPanel)
         root.addView(buildAskableContentPanel())
         val debugPanel = buildDebugPanel()
         if (isDebugBuild) {
@@ -267,7 +271,6 @@ class MainActivity : Activity() {
         })
         statusPanel = debugLine("状态", "待启动")
         wakePanel = debugLine("唤醒", "未检测")
-        asrPanel = debugLine("识别", "未识别")
         nluPanel = debugLine("意图", "无")
         ttsPanel = debugLine("回复", "无")
         rmsPanel = debugLine("音频", "无 RMS")
@@ -276,7 +279,6 @@ class MainActivity : Activity() {
         cooperationPanel = debugLine("协作信息", "未读取")
         panel.addView(statusPanel)
         panel.addView(wakePanel)
-        panel.addView(asrPanel)
         panel.addView(nluPanel)
         panel.addView(ttsPanel)
         panel.addView(rmsPanel)
@@ -343,7 +345,7 @@ class MainActivity : Activity() {
         if (!::statusPanel.isInitialized) return
         statusPanel.text = "状态：待启动"
         wakePanel.text = "唤醒：未检测"
-        asrPanel.text = "识别：未识别"
+        asrPanel.text = "最近听到：尚无识别结果"
         nluPanel.text = "意图：无"
         ttsPanel.text = "回复：无"
         rmsPanel.text = "音频：无 RMS"
@@ -365,7 +367,9 @@ class MainActivity : Activity() {
             "VoicePipelineController failed" in line || "ERROR" in line -> statusPanel.text = "状态：错误 ${line.takeLast(80)}"
         }
         if ("KWS wake" in line) wakePanel.text = "唤醒：${line.after("keyword=").before(" confidence=")}"
-        if ("ASR text=" in line) asrPanel.text = "识别：${line.after("ASR text=").before(" confidence=").ifBlank { "空结果" }}"
+        if ("ASR text=" in line) {
+            asrPanel.text = "最近听到：${line.after("ASR text=").before(" confidence=").ifBlank { "未识别到语音" }}"
+        }
         if ("NLU intent=" in line) nluPanel.text = "意图：${line.after("NLU intent=").before(" reason=")}"
         if ("TTS wake_ack=" in line) ttsPanel.text = "回复：${line.after("TTS wake_ack=")}"
         if ("TTS reply=" in line) ttsPanel.text = "回复：${line.after("TTS reply=")}"
