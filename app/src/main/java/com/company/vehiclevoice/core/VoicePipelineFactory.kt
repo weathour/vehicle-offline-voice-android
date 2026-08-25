@@ -37,7 +37,7 @@ object VoicePipelineFactory {
             rmsLogEveryFrames = 25,
             wakeTimeoutFrames = 300,
             maxUtteranceFrames = 300,
-            postWakeAcknowledgementFrames = 8
+            postWakeAcknowledgementFrames = 2
         )
     }
 
@@ -123,7 +123,8 @@ object VoicePipelineFactory {
             logSink = logSink,
             readOnlySnapshotProvider = readOnlySnapshotProvider,
             allowVehicleControlActions = false,
-            wakeAcknowledgementText = "我在"
+            wakeAcknowledgementText = "我在",
+            pauseAudioDuringTts = true
         )
     }
 
@@ -135,7 +136,8 @@ object VoicePipelineFactory {
         logSink: EventLogSink,
         readOnlySnapshotProvider: VehicleReadOnlySnapshotProvider? = RedisVehicleSnapshotProvider.simulated(),
         allowVehicleControlActions: Boolean = true,
-        wakeAcknowledgementText: String? = null
+        wakeAcknowledgementText: String? = null,
+        pauseAudioDuringTts: Boolean = false
     ): VoicePipeline = VoicePipeline(
         audioSource = audioSource,
         keywordSpotter = keywordSpotter,
@@ -152,6 +154,7 @@ object VoicePipelineFactory {
         logSink = logSink,
         readOnlySnapshotProvider = readOnlySnapshotProvider,
         allowVehicleControlActions = allowVehicleControlActions,
-        wakeAcknowledgementText = wakeAcknowledgementText
+        wakeAcknowledgementText = wakeAcknowledgementText,
+        pauseAudioDuringTts = pauseAudioDuringTts
     )
 }

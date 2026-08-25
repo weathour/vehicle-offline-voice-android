@@ -22,6 +22,9 @@ import com.company.vehiclevoice.data.readonly.SocketRedisBinaryDataSource
 import com.company.vehiclevoice.data.readonly.SocketRedisConfig
 import com.company.vehiclevoice.log.AndroidEventLogSink
 import com.company.vehiclevoice.tts.AndroidTtsEngine
+import com.company.vehiclevoice.tts.FallbackTtsEngine
+import com.company.vehiclevoice.tts.FixedPromptPlayer
+import com.company.vehiclevoice.tts.SherpaOfflineTtsEngine
 
 class VoiceForegroundService : Service() {
     private val logSink = AndroidEventLogSink()
@@ -79,7 +82,16 @@ class VoiceForegroundService : Service() {
                         .onFailure { logSink.warn("Vosk model unavailable: ${it.message}") }
                         .getOrNull()
                 },
-                ttsEngineFactory = { AndroidTtsEngine(this) },
+                ttsEngineFactory = {
+                    val prompts = FixedPromptPlayer(this)
+                    FallbackTtsEngine(
+                        embeddedFactory = { SherpaOfflineTtsEngine(this) },
+                        systemFactory = { AndroidTtsEngine(this) },
+                        playFixedPrompt = prompts::playIfKnown,
+                        playUnavailablePrompt = prompts::playUnavailable,
+                        logSink = logSink
+                    )
+                },
                 readOnlySnapshotProviderFactory = { readOnlySnapshotProvider(vehicleSourceConfig) }
             )
         },

@@ -7,6 +7,7 @@ import com.company.vehiclevoice.asr.AsrEngine
 import com.company.vehiclevoice.asr.AsrResult
 import com.company.vehiclevoice.asr.ScriptedAsrEngine
 import com.company.vehiclevoice.audio.FakePcmSource
+import com.company.vehiclevoice.audio.AudioSource
 import com.company.vehiclevoice.audio.PcmFrame
 import com.company.vehiclevoice.data.MockRedisStore
 import com.company.vehiclevoice.data.VehicleStateProjector
@@ -187,6 +188,46 @@ class VoicePipelineTest {
         assertTrue(logSink.lines().any { it.contains("awaiting_command_after_wake_ack") })
     }
 
+    @Test
+    fun halfDuplexModePausesCaptureForWakeAndReplySpeech() {
+        val frames = listOf(
+            PcmFrame.silence(sequence = 0),
+            PcmFrame.silence(sequence = 1),
+            PcmFrame.constantTone(sequence = 2, amplitude = 10_000),
+            PcmFrame.constantTone(sequence = 3, amplitude = 10_000),
+            PcmFrame.silence(sequence = 4),
+            PcmFrame.silence(sequence = 5)
+        )
+        val source = ResumableAudioSource(frames)
+        val tts = MockTtsEngine()
+        val logSink = RecordingEventLogSink()
+        val pipeline = VoicePipeline(
+            audioSource = source,
+            keywordSpotter = ScriptedKeywordSpotter(wakeSequences = setOf(1L)),
+            vadEngine = EnergyVadEngine(),
+            asrEngine = ScriptedAsrEngine.single("打开空调"),
+            intentParser = RuleIntentParser(),
+            stateStore = MockRedisStore(),
+            stateProjector = VehicleStateProjector(),
+            replyTemplateEngine = ReplyTemplateEngine(),
+            ttsEngine = tts,
+            unityActionMapper = UnityActionMapper(clockMs = { 123L }),
+            unityActionJsonEncoder = UnityActionJsonEncoder(),
+            unityEventSink = RecordingUnityEventSink(),
+            logSink = logSink,
+            wakeAcknowledgementText = "我在",
+            pauseAudioDuringTts = true
+        )
+
+        pipeline.runUntilSourceEnds()
+
+        assertEquals(listOf("我在", "已为你打开空调"), tts.spokenTexts())
+        assertEquals(3, source.startCount)
+        assertEquals(3, source.stopCount)
+        assertTrue(logSink.lines().any { it.contains("audio_paused_for_tts") })
+        assertTrue(logSink.lines().any { it.contains("audio_resumed_after_tts") })
+    }
+
     private fun pipeline(
         asrText: String,
         wakeSequences: Set<Long>,
@@ -230,6 +271,31 @@ class VoicePipelineTest {
         override fun recognize(frames: List<PcmFrame>): AsrResult {
             receivedSequences = frames.map { it.sequence }
             return AsrResult(text = text, confidence = 0.99)
+        }
+    }
+
+    private class ResumableAudioSource(private val frames: List<PcmFrame>) : AudioSource {
+        private var index = 0
+        override var isStarted = false
+            private set
+        var startCount = 0
+            private set
+        var stopCount = 0
+            private set
+
+        override fun start() {
+            startCount += 1
+            isStarted = true
+        }
+
+        override fun read(): PcmFrame? {
+            check(isStarted)
+            return frames.getOrNull(index++)
+        }
+
+        override fun stop() {
+            stopCount += 1
+            isStarted = false
         }
     }
 

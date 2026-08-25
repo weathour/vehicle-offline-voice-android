@@ -1,7 +1,7 @@
 package com.company.vehiclevoice.tts
 
 import android.content.Context
-import android.os.Build
+import android.media.AudioAttributes
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
@@ -13,9 +13,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class AndroidTtsEngine(context: Context) : TtsEngine, AutoCloseable {
     private val ready = AtomicBoolean(false)
-    private val pendingUtterances = ConcurrentHashMap<String, CountDownLatch>()
+    private val closed = AtomicBoolean(false)
+    private val initialized = CountDownLatch(1)
+    private val pendingUtterances = ConcurrentHashMap<String, PendingUtterance>()
     private val tts = TextToSpeech(context.applicationContext) { status ->
         ready.set(status == TextToSpeech.SUCCESS)
+        initialized.countDown()
     }
 
     init {
@@ -23,52 +26,71 @@ class AndroidTtsEngine(context: Context) : TtsEngine, AutoCloseable {
             override fun onStart(utteranceId: String?) = Unit
 
             override fun onDone(utteranceId: String?) {
-                pendingUtterances.remove(utteranceId)?.countDown()
+                pendingUtterances[utteranceId]?.done?.countDown()
             }
 
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
-                pendingUtterances.remove(utteranceId)?.countDown()
+                pendingUtterances[utteranceId]?.let {
+                    it.failed.set(true)
+                    it.done.countDown()
+                }
             }
 
             override fun onError(utteranceId: String?, errorCode: Int) {
-                pendingUtterances.remove(utteranceId)?.countDown()
+                pendingUtterances[utteranceId]?.let {
+                    it.failed.set(true)
+                    it.done.countDown()
+                }
             }
         })
     }
 
+    @Synchronized
     override fun speak(text: String) {
-        if (!ready.get()) {
-            throw IllegalStateException("Android TTS is not initialized")
-        }
+        check(!closed.get()) { "Android TTS is closed" }
+        val initCompleted = initialized.await(INIT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        check(initCompleted && ready.get()) { "Android TTS is not initialized" }
         val speechText = TtsPronunciationFormatter.forSpeech(text)
-        tts.language = Locale.CHINESE
+        val languageResult = tts.setLanguage(Locale.SIMPLIFIED_CHINESE)
+        check(languageResult >= TextToSpeech.LANG_AVAILABLE) { "Android TTS has no Chinese voice data" }
+        tts.setAudioAttributes(
+            AudioAttributes.Builder()
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                .build()
+        )
         val utteranceId = "vehicle-voice-${UUID.randomUUID()}"
-        val done = CountDownLatch(1)
-        pendingUtterances[utteranceId] = done
-        val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            tts.speak(speechText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
-        } else {
-            @Suppress("DEPRECATION")
-            tts.speak(speechText, TextToSpeech.QUEUE_FLUSH, hashMapOf(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID to utteranceId))
-        }
+        val pending = PendingUtterance()
+        pendingUtterances[utteranceId] = pending
+        val result = tts.speak(speechText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         if (result != TextToSpeech.SUCCESS) {
             pendingUtterances.remove(utteranceId)
             throw IllegalStateException("Android TTS failed to enqueue speech")
         }
-        val completed = done.await(timeoutMsFor(speechText), TimeUnit.MILLISECONDS)
+        val completed = pending.done.await(timeoutMsFor(speechText), TimeUnit.MILLISECONDS)
         pendingUtterances.remove(utteranceId)
-        if (!completed) {
-            throw IllegalStateException("Android TTS timed out")
-        }
+        check(completed) { "Android TTS timed out" }
+        check(!pending.failed.get()) { "Android TTS failed during speech" }
     }
 
     override fun close() {
-        pendingUtterances.values.forEach { it.countDown() }
+        if (!closed.compareAndSet(false, true)) return
+        pendingUtterances.values.forEach { it.done.countDown() }
         pendingUtterances.clear()
+        tts.stop()
         tts.shutdown()
     }
 
     private fun timeoutMsFor(text: String): Long =
-        (1_500L + text.length * 450L).coerceIn(2_000L, 10_000L)
+        (2_000L + text.length * 500L).coerceIn(3_000L, 20_000L)
+
+    private class PendingUtterance(
+        val done: CountDownLatch = CountDownLatch(1),
+        val failed: AtomicBoolean = AtomicBoolean(false)
+    )
+
+    companion object {
+        private const val INIT_TIMEOUT_MS = 3_000L
+    }
 }

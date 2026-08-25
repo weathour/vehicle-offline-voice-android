@@ -1,6 +1,6 @@
 # 渝行智声车载离线语音交互软件
 
-“渝行智声”v1.1 是面向手机和车载 Android 终端的车载离线语音交互软件。设备连接车辆只读 Redis 数据源后，可通过离线语音查询车速、电量、告警和协作场景等车辆状态。
+“渝行智声”v1.2 是面向手机和车载 Android 终端的车载离线语音交互软件。设备连接车辆只读 Redis 数据源后，可通过离线语音查询车速、电量、告警和协作场景等车辆状态。
 
 著作权人：长安大学。主要开发人员：杨兴杰、陈婷、徐志刚、王嘉鑫、申丹丹。正式包名：`cn.edu.chd.yuxingvoice`。
 
@@ -8,13 +8,15 @@
 
 已完成：
 
-- Android 真机离线语音链路：唤醒词、VAD、Vosk ASR、规则 NLU、Android TTS。
+- Android 真机离线语音链路：唤醒词、VAD、Vosk ASR、规则 NLU、内置 sherpa-onnx 中文 TTS。
+- 无需安装系统 TTS 或中文语音包；内置 TTS 失败时自动尝试系统 TTS，最后播放固定 WAV 故障提示。
+- TTS 播报期间暂停麦克风采集，避免扬声器回声被唤醒或识别链路再次收录。
 - 只读 Redis/protobuf 车辆状态读取。
 - 手机读取电脑 Redis 模拟器并完成端到端测试。
 - 车速、电量、定位、感知、轨迹和 Sam 协作场景等只读问答。
 - ASR 常见误识别与特色短音收敛，例如“党”查询档位、“瑞迪丝”查询 Redis、“写作常见”查询协作场景。
 - 正式界面显示最近一次 ASR 原始识别文本，便于现场确认设备实际听到了什么。
-- TTS 朗读前把 `V2I/V2V/V2X` 转为 `V突I/V突V/V突X`。
+- TTS 朗读前把 `V2I/V2V/V2X`、Redis、SOC、RTK 等工程词转换为中文模型可稳定朗读的形式。
 - 正式使用 UI：填写 Redis IP/端口，检测数据连接后启动离线语音服务。
 
 ## 使用流程
@@ -77,7 +79,8 @@ app/build/outputs/apk/debug/app-debug.apk
 
 - 当前阶段只读车辆状态，不发真实车辆控制命令。
 - `INTERNET` 权限是有意加入，用于手机 / 车载屏幕读取车辆或电脑 Redis。
-- 不使用云 ASR/TTS。
+- ASR 与主 TTS 均在应用内离线运行，不使用云 ASR/TTS；系统 TTS 仅为可选备用。
+- v1.2 已随 APK 打包 sherpa-onnx 运行库、中文模型和固定提示音，目标设备不需要 Play 商店或额外 TTS 配置。
 - Vosk restricted grammar 暂不启用；中文整句 grammar 已验证会导致 `[unk]`，当前采用开放 ASR + NLU 领域纠错。
 
 ## 文档入口
@@ -89,3 +92,4 @@ app/build/outputs/apk/debug/app-debug.apk
 - 接口文档入库：`docs/interface-ingest/2026-06-08/`
 - 架构说明：`docs/architecture.md`
 - 语音链路：`docs/voice-pipeline.md`
+- 第三方软件与模型许可：`THIRD_PARTY_NOTICES.md`

@@ -65,7 +65,8 @@ class VoicePipeline(
     private val logSink: EventLogSink,
     private val readOnlySnapshotProvider: VehicleReadOnlySnapshotProvider? = null,
     private val allowVehicleControlActions: Boolean = true,
-    private val wakeAcknowledgementText: String? = null
+    private val wakeAcknowledgementText: String? = null,
+    private val pauseAudioDuringTts: Boolean = false
 ) : AutoCloseable {
     fun runUntilSourceEnds(maxFrames: Int = 2_000): VoicePipelineResult = run(
         VoicePipelineRunConfig(maxFrames = maxFrames)
@@ -249,14 +250,7 @@ class VoicePipeline(
 
     private fun speakWakeAcknowledgementIfNeeded() {
         val text = wakeAcknowledgementText?.takeIf { it.isNotBlank() } ?: return
-        try {
-            val startedAtMs = System.currentTimeMillis()
-            ttsEngine.speak(text)
-            val durationMs = System.currentTimeMillis() - startedAtMs
-            logSink.info("TTS wake_ack=$text durationMs=$durationMs")
-        } catch (throwable: Throwable) {
-            logSink.warn("TTS wake acknowledgement failed: ${throwable.message}")
-        }
+        speakSafely(text, "wake_ack", "TTS wake acknowledgement failed")
     }
 
     private fun handleUtterance(frames: List<PcmFrame>): VoicePipelineResult {
@@ -268,12 +262,7 @@ class VoicePipeline(
         if (parse.isActionable && !allowVehicleControlActions) {
             val reply = "实车只读模式仅支持查询，已拒绝执行车控指令"
             logSink.warn("Vehicle control action rejected in read-only mode intent=${parse.intent.name}")
-            try {
-                ttsEngine.speak(reply)
-                logSink.info("TTS reply=$reply")
-            } catch (throwable: Throwable) {
-                logSink.warn("TTS failed after read-only rejection: ${throwable.message}")
-            }
+            speakSafely(reply, "reply", "TTS failed after read-only rejection")
             return VoicePipelineResult(
                 wakeDetected = true,
                 asrText = asr.text,
@@ -288,12 +277,7 @@ class VoicePipeline(
         val mutated = stateProjector.apply(parse, stateStore)
         if (!mutated) logSink.info("State not mutated for intent=${parse.intent.name}")
         val reply = replyTemplateEngine.render(parse, stateStore)
-        try {
-            ttsEngine.speak(reply)
-            logSink.info("TTS reply=$reply")
-        } catch (throwable: Throwable) {
-            logSink.warn("TTS failed but action pipeline continues: ${throwable.message}")
-        }
+        speakSafely(reply, "reply", "TTS failed but action pipeline continues")
         val unityJson = unityActionMapper.map(parse)?.let { action ->
             unityActionJsonEncoder.encode(action).also { json ->
                 unityEventSink.send(json)
@@ -310,5 +294,30 @@ class VoicePipeline(
             framesRead = frames.size,
             utterancesHandled = 1
         )
+    }
+
+    private fun speakSafely(text: String, logLabel: String, failureMessage: String) {
+        val resumeAudio = pauseAudioDuringTts && audioSource.isStarted
+        if (resumeAudio) {
+            audioSource.stop()
+            logSink.info("Pipeline state=audio_paused_for_tts")
+        }
+        try {
+            val startedAtMs = System.currentTimeMillis()
+            ttsEngine.speak(text)
+            logSink.info("TTS $logLabel=$text durationMs=${System.currentTimeMillis() - startedAtMs}")
+        } catch (throwable: Throwable) {
+            if (throwable is InterruptedException || Thread.currentThread().isInterrupted) {
+                Thread.currentThread().interrupt()
+            }
+            logSink.warn("$failureMessage: ${throwable.message}")
+        } finally {
+            if (resumeAudio && !Thread.currentThread().isInterrupted) {
+                audioSource.start()
+                keywordSpotter.reset()
+                vadEngine.reset()
+                logSink.info("Pipeline state=audio_resumed_after_tts")
+            }
+        }
     }
 }

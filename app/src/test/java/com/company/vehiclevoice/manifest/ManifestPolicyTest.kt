@@ -12,6 +12,7 @@ class ManifestPolicyTest {
         assertTrue(manifest.contains("android.permission.INTERNET"))
         assertTrue(manifest.contains("android.permission.RECORD_AUDIO"))
         assertTrue(manifest.contains("android:foregroundServiceType=\"microphone\""))
+        assertTrue(manifest.contains("android.intent.action.TTS_SERVICE"))
         assertFalse(manifest.contains("android.permission.REQUEST_INSTALL_PACKAGES"))
         assertFalse(manifest.contains(".update.UpdateApkProvider"))
         assertFalse(manifest.contains(".RedisDebugActivity"))

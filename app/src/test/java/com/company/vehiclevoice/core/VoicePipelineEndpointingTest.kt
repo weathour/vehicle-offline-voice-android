@@ -55,7 +55,7 @@ class VoicePipelineEndpointingTest {
 
         assertEquals(300, config.wakeTimeoutFrames)
         assertEquals(300, config.maxUtteranceFrames)
-        assertEquals(8, config.postWakeAcknowledgementFrames)
+        assertEquals(2, config.postWakeAcknowledgementFrames)
     }
 
     private fun pipeline(frames: List<PcmFrame>, logSink: RecordingEventLogSink): VoicePipeline = VoicePipeline(
