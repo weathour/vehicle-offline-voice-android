@@ -29,13 +29,17 @@ class ManifestPolicyTest {
     }
 
     @Test
-    fun releasePath_showsLatestAsrTranscript() {
+    fun releasePath_showsServiceStatusAndLatestAsrTranscript() {
         val source = File("src/main/java/com/company/vehiclevoice/MainActivity.kt").readText()
         val releaseSurface = source.substringAfter("private fun buildContentView()")
             .substringBefore("val debugPanel = buildDebugPanel()")
+        val feedbackSurface = source.substringAfter("private fun buildRuntimeFeedbackPanel()")
+            .substringBefore("private fun buildRedisConfigPanel()")
 
-        assertTrue(releaseSurface.contains("asrPanel = debugLine(\"最近听到\", \"尚无识别结果\")"))
-        assertTrue(releaseSurface.contains("root.addView(asrPanel)"))
+        assertTrue(releaseSurface.contains("root.addView(buildStatusPanel()"))
+        assertTrue(releaseSurface.contains("root.addView(buildRuntimeFeedbackPanel()"))
+        assertTrue(feedbackSurface.contains("asrPanel = debugLine(\"最近听到\", \"尚无识别结果\")"))
+        assertTrue(feedbackSurface.contains("addView(asrPanel"))
         assertTrue(source.contains("if (\"ASR text=\" in line)"))
         assertTrue(source.contains("未识别到语音"))
     }

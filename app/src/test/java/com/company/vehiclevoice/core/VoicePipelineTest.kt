@@ -4,6 +4,7 @@ import com.company.vehiclevoice.action.RecordingUnityEventSink
 import com.company.vehiclevoice.action.UnityActionJsonEncoder
 import com.company.vehiclevoice.action.UnityActionMapper
 import com.company.vehiclevoice.asr.AsrEngine
+import com.company.vehiclevoice.asr.AsrAlternative
 import com.company.vehiclevoice.asr.AsrResult
 import com.company.vehiclevoice.asr.ScriptedAsrEngine
 import com.company.vehiclevoice.audio.FakePcmSource
@@ -226,6 +227,43 @@ class VoicePipelineTest {
         assertEquals(3, source.stopCount)
         assertTrue(logSink.lines().any { it.contains("audio_paused_for_tts") })
         assertTrue(logSink.lines().any { it.contains("audio_resumed_after_tts") })
+    }
+
+    @Test
+    fun nBestAlternativesConsolidateEvidenceForTheSameQueryType() {
+        val result = resolveAsrIntent(
+            AsrResult(
+                text = "车 速 多 少",
+                confidence = 100.0,
+                alternatives = listOf(
+                    AsrAlternative("车 速 多 少", 100.0),
+                    AsrAlternative("车 素 多 少", 99.8),
+                    AsrAlternative("电 量 多 少", 99.7)
+                )
+            ),
+            RuleIntentParser(allowedIntentNames = RuleIntentParser.SIX_QUERY_INTENTS)
+        )
+
+        assertEquals("vehicle_speed_query", result.intent.name)
+        assertEquals("nbest_consensus", result.reason)
+    }
+
+    @Test
+    fun nBestAlternativesRejectCloseScoresFromDifferentQueryTypes() {
+        val result = resolveAsrIntent(
+            AsrResult(
+                text = "车 速 多 少",
+                confidence = 100.0,
+                alternatives = listOf(
+                    AsrAlternative("车 速 多 少", 100.0),
+                    AsrAlternative("电 量 多 少", 99.9)
+                )
+            ),
+            RuleIntentParser(allowedIntentNames = RuleIntentParser.SIX_QUERY_INTENTS)
+        )
+
+        assertEquals("fallback", result.intent.name)
+        assertEquals("nbest_ambiguous", result.reason)
     }
 
     private fun pipeline(

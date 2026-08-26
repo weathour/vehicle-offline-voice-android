@@ -2,6 +2,7 @@ package com.company.vehiclevoice
 
 import android.Manifest
 import android.app.Activity
+import android.content.res.ColorStateList
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
@@ -11,11 +12,13 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.text.InputType
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -92,160 +95,210 @@ class MainActivity : Activity() {
     private fun buildContentView(): ScrollView {
         val page = ScrollView(this).apply {
             isFillViewport = true
+            setBackgroundColor(getColor(R.color.app_background))
         }
+        val wideScreen = resources.configuration.screenWidthDp >= 600
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(32, 32, 32, 32)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
+            setPadding(dp(24), dp(24), dp(24), dp(32))
         }
 
         val title = TextView(this).apply {
             text = getString(R.string.software_name)
-            textSize = 22f
+            textSize = if (wideScreen) 30f else 24f
             setTypeface(typeface, Typeface.BOLD)
+            setTextColor(getColor(R.color.ink))
         }
         root.addView(title)
-        root.addView(TextView(this).apply {
-            text = "使用流程：连接车辆网络 → 配置 Redis → 选择语音 → 检测连接 → 启动服务"
-            textSize = 13f
-        })
-        root.addView(buildSpokenTextPanel())
-        root.addView(buildRedisConfigPanel())
-        root.addView(buildTtsPanel())
-
-        root.addView(Button(this).apply {
-            text = "1. 检测车辆数据连接"
-            setOnClickListener { checkVehicleDataConnection() }
-        })
-
-        root.addView(Button(this).apply {
-            text = "2. 启动语音服务"
-            setOnClickListener {
-                remoteRedisCheckBox.isChecked = true
-                saveRedisConfig()
-                startVoiceServiceWhenPermissionsReady(VoiceRuntimeMode.RealMicManual)
-            }
-        })
-
-        if (isDebugBuild) {
-            root.addView(Button(this).apply {
-                text = "Redis 调试页面（1Hz 对比）"
-                setOnClickListener {
-                    remoteRedisCheckBox.isChecked = true
-                    saveRedisConfig()
-                    startActivity(Intent(this@MainActivity, RedisDebugActivity::class.java))
-                }
-            })
+        root.addView(supportingText("连接车辆网络，确认 Redis 后启动语音服务。所有查询只读，不控制车辆。"))
+        root.addView(buildStatusPanel(), sectionParams(18))
+        root.addView(buildSpokenTextPanel(), sectionParams(16))
+        val settingsSection = buildSettingsSection()
+        val actionPanel = buildActionPanel()
+        if (wideScreen) {
+            root.addView(settingsSection, sectionParams(8))
+            root.addView(actionPanel, sectionParams(12))
+        } else {
+            root.addView(actionPanel, sectionParams(8))
+            root.addView(settingsSection, sectionParams(12))
         }
+        root.addView(buildRuntimeFeedbackPanel(), sectionParams(12))
+        root.addView(buildAskableContentPanel(), sectionParams(16))
 
-        root.addView(Button(this).apply {
-            text = "停止语音服务"
-            setOnClickListener { stopVoiceService() }
-        })
-
-        connectionPanel = debugLine("连接状态", "未检测")
-        root.addView(connectionPanel)
-        asrPanel = debugLine("最近听到", "尚无识别结果").apply {
-            setPadding(0, dp(12), 0, dp(12))
-        }
-        root.addView(asrPanel)
-        root.addView(buildAskableContentPanel())
         val debugPanel = buildDebugPanel()
         if (isDebugBuild) {
-            root.addView(debugPanel)
-            root.addView(buildDeveloperPanel())
+            root.addView(debugPanel, sectionParams(16))
+            root.addView(buildDeveloperPanel(), sectionParams(8))
         }
 
         logView = TextView(this).apply {
-            textSize = 12f
+            textSize = 14f
+            setTextColor(getColor(R.color.ink))
+            setPadding(dp(16), dp(12), dp(16), dp(12))
             setTextIsSelectable(true)
         }
         if (isDebugBuild) {
-            root.addView(TextView(this).apply {
-                text = "现场日志"
-                textSize = 16f
-                setTypeface(typeface, Typeface.BOLD)
-            })
-            val logScrollView = ScrollView(this)
+            root.addView(sectionTitle("现场日志"), sectionParams(18))
+            val logScrollView = ScrollView(this).apply {
+                background = getDrawable(R.drawable.panel_background)
+            }
             logScrollView.addView(logView)
             root.addView(logScrollView, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 dp(220)
-            ))
+            ).apply { topMargin = dp(8) })
         }
 
-        page.addView(root)
+        val horizontalMargin = dp(if (wideScreen) 48 else 16)
+        val contentWidth = minOf(
+            resources.displayMetrics.widthPixels - horizontalMargin * 2,
+            dp(960)
+        ).coerceAtLeast(1)
+        page.addView(
+            root,
+            FrameLayout.LayoutParams(contentWidth, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            }
+        )
         return page
+    }
+
+    private fun buildStatusPanel(): TextView = TextView(this).also { statusPanel = it }.apply {
+        text = "服务状态：待启动"
+        textSize = 18f
+        setTypeface(typeface, Typeface.BOLD)
+        setTextColor(getColor(R.color.status_info_text))
+        setPadding(dp(18), dp(16), dp(18), dp(16))
+        minimumHeight = dp(60)
+        gravity = Gravity.CENTER_VERTICAL
+        background = getDrawable(R.drawable.status_info_background)
+        accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+    }
+
+    private fun buildSettingsSection(): LinearLayout {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(20), dp(20), dp(20))
+            background = getDrawable(R.drawable.panel_background)
+        }
+        content.addView(buildRedisConfigPanel())
+        content.addView(View(this).apply {
+            setBackgroundColor(getColor(R.color.border))
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
+        content.addView(buildTtsPanel(), sectionParams(18))
+
+        val firstRun = !getSharedPreferences(PREFS, Context.MODE_PRIVATE).contains(PREF_REDIS_HOST)
+        content.visibility = if (firstRun) View.VISIBLE else View.GONE
+        val toggle = secondaryButton(if (firstRun) "收起连接与语音设置" else "修改连接与语音设置")
+        toggle.setOnClickListener {
+            val show = content.visibility != View.VISIBLE
+            content.visibility = if (show) View.VISIBLE else View.GONE
+            toggle.text = if (show) "收起连接与语音设置" else "修改连接与语音设置"
+        }
+        container.addView(toggle)
+        container.addView(content, sectionParams(8))
+        return container
+    }
+
+    private fun buildActionPanel(): LinearLayout {
+        val horizontal = resources.configuration.screenWidthDp >= 600
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        val checkButton = secondaryButton("检测车辆连接").apply {
+            setOnClickListener { checkVehicleDataConnection(this) }
+        }
+        val startButton = primaryButton("启动语音服务").apply {
+            setOnClickListener {
+                remoteRedisCheckBox.isChecked = true
+                if (selectedVehicleSourceConfig() != null) {
+                    startVoiceServiceWhenPermissionsReady(VoiceRuntimeMode.RealMicManual)
+                }
+            }
+        }
+        val stopButton = secondaryButton("停止语音服务").apply {
+            setOnClickListener { stopVoiceService() }
+        }
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        row.addView(checkButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(startButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+            marginStart = dp(8)
+        })
+        if (horizontal) {
+            row.addView(stopButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = dp(8)
+            })
+        }
+        panel.addView(row)
+        if (!horizontal) panel.addView(stopButton, sectionParams(8))
+        return panel
+    }
+
+    private fun buildRuntimeFeedbackPanel(): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(20), dp(18), dp(20), dp(18))
+        background = getDrawable(R.drawable.panel_background)
+        addView(sectionTitle("实时反馈"))
+        connectionPanel = debugLine("车辆连接", "尚未检测")
+        addView(connectionPanel, sectionParams(8))
+        asrPanel = debugLine("最近听到", "尚无识别结果")
+        addView(asrPanel, sectionParams(6))
     }
 
     private fun buildRedisConfigPanel(): LinearLayout {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, 16, 0, 16)
+            setPadding(0, 0, 0, dp(16))
         }
-        panel.addView(TextView(this).apply {
-            text = "车辆 / 电脑 Redis"
-            textSize = 16f
-            setTypeface(typeface, Typeface.BOLD)
-        })
+        panel.addView(sectionTitle("车辆数据连接"))
         remoteRedisCheckBox = CheckBox(this).apply {
             text = "读取外部 Redis"
             isChecked = true
             visibility = View.GONE
         }
         panel.addView(remoteRedisCheckBox)
-        panel.addView(TextView(this).apply {
-            text = "数据源：车辆只读 Redis"
-            textSize = 13f
-        })
+        panel.addView(supportingText("数据源：车辆只读 Redis"))
         redisHostInput = EditText(this).apply {
-            hint = "Redis IP，例如 192.168.1.10"
+            hint = "例如 192.168.2.112"
             setText(loadString(PREF_REDIS_HOST, VehicleDataSourceRuntimeConfig.DEFAULT_REMOTE_HOST))
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             setSingleLine(true)
         }
-        panel.addView(redisHostInput)
+        addLabeledInput(panel, "Redis 地址", redisHostInput)
         redisPortInput = EditText(this).apply {
-            hint = "端口"
+            hint = "1–65535"
             setText(loadString(PREF_REDIS_PORT, VehicleDataSourceRuntimeConfig.DEFAULT_REMOTE_PORT.toString()))
             inputType = InputType.TYPE_CLASS_NUMBER
             setSingleLine(true)
         }
-        panel.addView(redisPortInput)
+        addLabeledInput(panel, "端口", redisPortInput)
         redisDbInput = EditText(this).apply {
-            hint = "DB，默认 0"
+            hint = "0 或更大"
             setText(loadString(PREF_REDIS_DB, "0"))
             inputType = InputType.TYPE_CLASS_NUMBER
             setSingleLine(true)
         }
-        panel.addView(redisDbInput)
+        addLabeledInput(panel, "数据库编号", redisDbInput)
         redisPasswordInput = EditText(this).apply {
-            hint = "密码，可留空"
+            hint = "未设置可留空"
             setText(if (isDebugBuild) loadString(PREF_REDIS_PASSWORD, "") else "")
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine(true)
         }
-        panel.addView(redisPasswordInput)
-        panel.addView(TextView(this).apply {
-            text = "设备必须与车辆 Redis 位于同一网络。连接检测通过后即可启动语音服务。"
-            textSize = 12f
-        })
+        addLabeledInput(panel, "密码（可选）", redisPasswordInput)
+        panel.addView(supportingText("设备必须与车辆 Redis 位于同一网络。正式版密码只在本次运行中使用，不会保存。"), sectionParams(10))
         return panel
     }
 
     private fun buildTtsPanel(): LinearLayout {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, 4, 0, 16)
+            setPadding(0, 0, 0, 0)
         }
-        panel.addView(TextView(this).apply {
-            text = "语音播报"
-            textSize = 16f
-            setTypeface(typeface, Typeface.BOLD)
-        })
+        panel.addView(sectionTitle("语音播报"))
         ttsConfig = loadTtsConfig()
         val group = RadioGroup(this).apply {
             orientation = RadioGroup.VERTICAL
@@ -259,7 +312,9 @@ class MainActivity : Activity() {
                     TtsProvider.Tencent -> "腾讯云在线语音（需导入 API 配置）"
                     TtsProvider.System -> "Android 系统语音"
                 }
-                minimumHeight = dp(48)
+                textSize = 16f
+                setTextColor(getColor(R.color.ink))
+                minimumHeight = dp(52)
                 isEnabled = ttsConfig.isConfigured(provider)
             }
             ttsRadioButtons[provider] = button
@@ -274,109 +329,82 @@ class MainActivity : Activity() {
             }
         }
         panel.addView(group)
-        panel.addView(Button(this).apply {
-            text = "试听当前语音"
-            minimumHeight = dp(48)
+        panel.addView(secondaryButton("试听当前语音").apply {
             setOnClickListener { previewTts(this) }
-        })
-        panel.addView(Button(this).apply {
-            text = "导入 TTS 配置文件"
-            minimumHeight = dp(48)
+        }, sectionParams(8))
+        panel.addView(secondaryButton("导入 TTS 配置文件").apply {
             setOnClickListener { chooseTtsConfigFile() }
-        })
-        panel.addView(Button(this).apply {
-            text = "清除已导入的 TTS 配置"
-            minimumHeight = dp(48)
+        }, sectionParams(8))
+        panel.addView(secondaryButton("清除在线语音配置").apply {
             setOnClickListener { clearTtsConfig() }
-        })
+        }, sectionParams(8))
         ttsConfigStatus = TextView(this).apply {
-            textSize = 12f
+            textSize = 14f
+            setTextColor(getColor(R.color.ink_muted))
+            setLineSpacing(dp(2).toFloat(), 1.08f)
             setTextIsSelectable(true)
         }
-        panel.addView(ttsConfigStatus)
+        panel.addView(ttsConfigStatus, sectionParams(10))
         updateTtsConfigStatus()
         return panel
     }
 
     private fun buildSpokenTextPanel(): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(0, dp(12), 0, dp(16))
-        addView(TextView(this@MainActivity).apply {
-            text = "当前播报内容"
-            textSize = 18f
-            setTypeface(typeface, Typeface.BOLD)
-        })
+        addView(sectionTitle("当前播报内容"))
         spokenTextPanel = TextView(this@MainActivity).apply {
             text = "尚无播报内容"
-            textSize = 22f
+            textSize = if (resources.configuration.screenWidthDp >= 600) 26f else 22f
+            setTextColor(getColor(R.color.ink))
             setLineSpacing(dp(4).toFloat(), 1.08f)
             setPadding(dp(18), dp(18), dp(18), dp(18))
-            minimumHeight = dp(112)
+            minimumHeight = dp(120)
             background = getDrawable(R.drawable.speech_output_background)
             setTextIsSelectable(true)
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
         addView(
             spokenTextPanel,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            sectionParams(8)
         )
-        addView(TextView(this@MainActivity).apply {
-            text = "即使设备没有可用 TTS 或网络异常，这里仍会显示本次应播报的完整文字。"
-            textSize = 12f
-            setPadding(0, dp(6), 0, 0)
-        })
+        addView(
+            supportingText("设备没有可用 TTS 或网络异常时，这里仍会显示完整回答。"),
+            sectionParams(6)
+        )
     }
 
     private fun buildAskableContentPanel(): LinearLayout {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, 18, 0, 18)
+            setPadding(dp(20), dp(18), dp(20), dp(20))
+            background = getDrawable(R.drawable.panel_background)
         }
+        panel.addView(sectionTitle("可问内容"))
+        panel.addView(
+            supportingText("唤醒后可换一种说法询问以下六类信息，识别不确定时软件会请你重新说。"),
+            sectionParams(4)
+        )
         panel.addView(TextView(this).apply {
-            text = "可问内容"
+            text = AskableVoiceContent.supportedQuestions.joinToString("\n") { "• ${it.phrase}" }
             textSize = 18f
-            setTypeface(typeface, Typeface.BOLD)
-        })
-        panel.addView(TextView(this).apply {
-            text = "实车主流程只做 Redis 只读问答，缺字段会说明证据不足，不会写车控。"
-            textSize = 13f
-        })
-        val categories = if (isDebugBuild) AskableVoiceContent.categories else AskableVoiceContent.releaseCategories
-        categories.forEach { category ->
-            panel.addView(TextView(this).apply {
-                text = category.title
-                textSize = 15f
-                setTypeface(typeface, Typeface.BOLD)
-                setPadding(0, 12, 0, 2)
-            })
-            panel.addView(TextView(this).apply {
-                text = category.description
-                textSize = 12f
-            })
-            panel.addView(TextView(this).apply {
-                text = category.questions.joinToString("\n") { question ->
-                    val caveat = question.caveat?.let { "（$it）" }.orEmpty()
-                    "• [${question.level.label}] ${question.phrase}：${question.answerScope}$caveat"
-                }
-                textSize = 13f
-                setLineSpacing(dp(2).toFloat(), 1.0f)
-                setTextIsSelectable(true)
-            })
-        }
+            setTextColor(getColor(R.color.ink))
+            setLineSpacing(dp(7).toFloat(), 1.08f)
+            setTextIsSelectable(true)
+        }, sectionParams(12))
+        panel.addView(
+            supportingText("车辆端缺少对应字段或数据无效时，回答会明确说明当前不可用。"),
+            sectionParams(10)
+        )
         return panel
     }
 
     private fun buildDebugPanel(): LinearLayout {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(18, 18, 18, 18)
+            setPadding(dp(20), dp(18), dp(20), dp(18))
+            background = getDrawable(R.drawable.panel_background)
         }
-        panel.addView(TextView(this).apply {
-            text = "识别 / TTS / 车况调试面板"
-            textSize = 18f
-            setTypeface(typeface, Typeface.BOLD)
-        })
-        statusPanel = debugLine("状态", "待启动")
+        panel.addView(sectionTitle("识别 / TTS / 车况调试面板"))
         wakePanel = debugLine("唤醒", "未检测")
         nluPanel = debugLine("意图", "无")
         ttsPanel = debugLine("回复", "无")
@@ -384,24 +412,16 @@ class MainActivity : Activity() {
         vehiclePanel = debugLine("只读车况", "未读取")
         warningPanel = debugLine("告警解释", "未读取")
         cooperationPanel = debugLine("协作信息", "未读取")
-        panel.addView(statusPanel)
-        panel.addView(wakePanel)
-        panel.addView(nluPanel)
-        panel.addView(ttsPanel)
-        panel.addView(rmsPanel)
-        panel.addView(vehiclePanel)
-        panel.addView(warningPanel)
-        panel.addView(cooperationPanel)
+        listOf(wakePanel, nluPanel, ttsPanel, rmsPanel, vehiclePanel, warningPanel, cooperationPanel)
+            .forEach { panel.addView(it, sectionParams(6)) }
         return panel
     }
 
     private fun buildDeveloperPanel(): LinearLayout {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, 10, 0, 10)
         }
-        developerToggleButton = Button(this).apply {
-            text = "显示开发调试入口"
+        developerToggleButton = secondaryButton("显示开发调试入口").apply {
             setOnClickListener {
                 val show = developerPanel.visibility != View.VISIBLE
                 developerPanel.visibility = if (show) View.VISIBLE else View.GONE
@@ -412,45 +432,125 @@ class MainActivity : Activity() {
         developerPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             visibility = View.GONE
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            background = getDrawable(R.drawable.panel_background)
         }
-        developerPanel.addView(Button(this).apply {
-            text = "开发：启动 APK 内置模拟预览"
+        developerPanel.addView(secondaryButton("打开 Redis 调试页面（1Hz）").apply {
+            setOnClickListener {
+                remoteRedisCheckBox.isChecked = true
+                if (selectedVehicleSourceConfig() != null) {
+                    saveRedisConfig()
+                    startActivity(Intent(this@MainActivity, RedisDebugActivity::class.java))
+                }
+            }
+        })
+        developerPanel.addView(secondaryButton("启动 APK 内置模拟预览").apply {
             setOnClickListener {
                 remoteRedisCheckBox.isChecked = false
                 startVoiceServiceWhenPermissionsReady(VoiceRuntimeMode.PreviewMock)
             }
-        })
-        developerPanel.addView(Button(this).apply {
-            text = "开发：启动虚拟麦克风烟测"
+        }, sectionParams(8))
+        developerPanel.addView(secondaryButton("启动虚拟麦克风烟测").apply {
             setOnClickListener {
                 remoteRedisCheckBox.isChecked = false
                 startVoiceServiceWhenPermissionsReady(VoiceRuntimeMode.VirtualMicSmoke)
             }
-        })
-        developerPanel.addView(Button(this).apply {
-            text = "清空日志/面板"
+        }, sectionParams(8))
+        developerPanel.addView(secondaryButton("清空日志与调试面板").apply {
             setOnClickListener {
                 logView.text = ""
                 resetDebugPanel()
                 UiLogBus.clear()
-                connectionPanel.text = "连接状态：未检测"
+                connectionPanel.text = "车辆连接：尚未检测"
             }
-        })
-        container.addView(developerPanel)
+        }, sectionParams(8))
+        container.addView(developerPanel, sectionParams(8))
         return container
+    }
+
+    private fun sectionTitle(value: String): TextView = TextView(this).apply {
+        text = value
+        textSize = 20f
+        setTypeface(typeface, Typeface.BOLD)
+        setTextColor(getColor(R.color.ink))
+    }
+
+    private fun supportingText(value: String): TextView = TextView(this).apply {
+        text = value
+        textSize = 15f
+        setTextColor(getColor(R.color.ink_muted))
+        setLineSpacing(dp(2).toFloat(), 1.08f)
+    }
+
+    private fun addLabeledInput(parent: LinearLayout, label: String, input: EditText) {
+        parent.addView(TextView(this).apply {
+            text = label
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(getColor(R.color.ink))
+            labelFor = input.id.takeIf { it != View.NO_ID } ?: View.generateViewId().also { input.id = it }
+        }, sectionParams(12))
+        input.apply {
+            textSize = 16f
+            minimumHeight = dp(52)
+            setTextColor(getColor(R.color.ink))
+            setHintTextColor(getColor(R.color.ink_muted))
+        }
+        parent.addView(input)
+    }
+
+    private fun primaryButton(label: String): Button = Button(this).apply {
+        text = label
+        textSize = 16f
+        isAllCaps = false
+        minimumHeight = dp(56)
+        setTypeface(typeface, Typeface.BOLD)
+        setTextColor(getColor(R.color.on_primary))
+        backgroundTintList = ColorStateList.valueOf(getColor(R.color.primary))
+    }
+
+    private fun secondaryButton(label: String): Button = Button(this).apply {
+        text = label
+        textSize = 16f
+        isAllCaps = false
+        minimumHeight = dp(56)
+        setTextColor(getColor(R.color.ink))
+        backgroundTintList = ColorStateList.valueOf(getColor(R.color.surface_muted))
     }
 
     private fun debugLine(label: String, value: String): TextView = TextView(this).apply {
         text = "$label：$value"
-        textSize = 15f
+        textSize = 16f
+        setTextColor(getColor(R.color.ink))
+        setLineSpacing(dp(2).toFloat(), 1.06f)
         setTextIsSelectable(true)
     }
 
+    private fun sectionParams(topMarginDp: Int = 0): LinearLayout.LayoutParams =
+        LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(topMarginDp)
+        }
+
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private enum class StatusTone { Info, Success, Warning, Error }
+
+    private fun showStatus(message: String, tone: StatusTone = StatusTone.Info) {
+        if (!::statusPanel.isInitialized) return
+        val (textColor, background) = when (tone) {
+            StatusTone.Info -> R.color.status_info_text to R.drawable.status_info_background
+            StatusTone.Success -> R.color.status_success_text to R.drawable.status_success_background
+            StatusTone.Warning -> R.color.status_warning_text to R.drawable.status_warning_background
+            StatusTone.Error -> R.color.status_error_text to R.drawable.status_error_background
+        }
+        statusPanel.text = "服务状态：$message"
+        statusPanel.setTextColor(getColor(textColor))
+        statusPanel.background = getDrawable(background)
+    }
 
     private fun resetDebugPanel() {
         if (!::statusPanel.isInitialized) return
-        statusPanel.text = "状态：待启动"
+        showStatus("待启动")
         wakePanel.text = "唤醒：未检测"
         asrPanel.text = "最近听到：尚无识别结果"
         nluPanel.text = "意图：无"
@@ -464,16 +564,17 @@ class MainActivity : Activity() {
 
     private fun updateDebugPanel(line: String) {
         when {
-            "VoiceForegroundService start command" in line -> statusPanel.text = "状态：服务启动 ${line.after("mode=")}"
-            "Foreground service type" in line -> statusPanel.text = "状态：前台麦克风服务已启动 ${line.after("vehicleSource=")}"
-            "Pipeline state=listening_start" in line -> statusPanel.text = "状态：监听中，等待唤醒词"
-            "Pipeline state=wake_detected" in line -> statusPanel.text = "状态：已唤醒，正在提示"
-            "Pipeline state=awaiting_command_after_wake_ack" in line -> statusPanel.text = "状态：请说指令"
-            "Pipeline state=recording_utterance" in line -> statusPanel.text = "状态：正在录制命令"
-            "Pipeline state=recognizing" in line -> statusPanel.text = "状态：正在识别命令"
-            "Pipeline state=listening_resume" in line -> statusPanel.text = "状态：回到监听，等待下一次唤醒"
-            "TTS " in line && " failed" in line -> statusPanel.text = "状态：语音播报不可用，回答已显示"
-            "VoicePipelineController failed" in line || "ERROR" in line -> statusPanel.text = "状态：错误 ${line.takeLast(80)}"
+            "VoiceForegroundService start command" in line -> showStatus("正在启动语音服务")
+            "Foreground service type" in line -> showStatus("语音服务已启动，正在准备麦克风")
+            "Pipeline state=listening_start" in line -> showStatus("监听中，等待唤醒词", StatusTone.Success)
+            "Pipeline state=wake_detected" in line -> showStatus("已唤醒，正在提示", StatusTone.Success)
+            "Pipeline state=awaiting_command_after_wake_ack" in line -> showStatus("请说问题", StatusTone.Success)
+            "Pipeline state=recording_utterance" in line -> showStatus("正在录制问题", StatusTone.Success)
+            "Pipeline state=recognizing" in line -> showStatus("正在识别问题")
+            "Pipeline state=listening_resume" in line -> showStatus("监听中，等待下一次唤醒", StatusTone.Success)
+            "TTS " in line && " failed" in line -> showStatus("语音播报不可用，回答已显示", StatusTone.Error)
+            "VoicePipelineController failed" in line || "ERROR" in line ->
+                showStatus("运行错误：${line.takeLast(80)}", StatusTone.Error)
         }
         if ("KWS wake" in line) wakePanel.text = "唤醒：${line.after("keyword=").before(" confidence=")}"
         if ("ASR text=" in line) {
@@ -486,7 +587,7 @@ class MainActivity : Activity() {
         if ("Vehicle read-only snapshot" in line) vehiclePanel.text = "只读车况：${line.after("Vehicle read-only snapshot ").before(" warning=").take(220)}"
         if (" warning=" in line) warningPanel.text = "告警解释：${line.after(" warning=").before(" cooperation=").take(180)}"
         if (" cooperation=" in line) cooperationPanel.text = "协作信息：${line.after(" cooperation=").take(180)}"
-        if ("Vosk model unavailable" in line) statusPanel.text = "状态：Vosk 模型不可用"
+        if ("Vosk model unavailable" in line) showStatus("离线识别模型不可用", StatusTone.Error)
     }
 
     private fun String.after(token: String): String = substringAfter(token, missingDelimiterValue = "")
@@ -525,7 +626,7 @@ class MainActivity : Activity() {
     }
 
     private fun startVoiceService(mode: VoiceRuntimeMode) {
-        val sourceConfig = selectedVehicleSourceConfig()
+        val sourceConfig = selectedVehicleSourceConfig() ?: return
         saveRedisConfig()
         val intent = Intent(this, VoiceForegroundService::class.java)
             .putExtra(VoiceRuntimeMode.EXTRA_NAME, mode.wireValue)
@@ -536,16 +637,12 @@ class MainActivity : Activity() {
             .putExtra(VehicleDataSourceRuntimeConfig.EXTRA_REDIS_PASSWORD, sourceConfig.password ?: "")
             .putExtra(VehicleDataSourceRuntimeConfig.EXTRA_REDIS_DATABASE, sourceConfig.database)
             .putExtra(VehicleDataSourceRuntimeConfig.EXTRA_REDIS_TIMEOUT_MS, sourceConfig.timeoutMs)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
+        startForegroundService(intent)
         appendLog(
             "已发送启动前台服务命令：${mode.displayName}；车况数据源：${sourceConfig.displayName}；" +
                 "语音：${selectedTtsName()}"
         )
-        statusPanel.text = "状态：启动命令已发送 ${mode.displayName} / ${sourceConfig.displayName}"
+        showStatus("启动命令已发送，正在准备服务")
     }
 
     private fun previewTts(button: Button) {
@@ -553,7 +650,7 @@ class MainActivity : Activity() {
         saveTtsPreference(provider)
         val ttsName = selectedTtsName()
         button.isEnabled = false
-        statusPanel.text = "状态：正在加载并试听$ttsName"
+        showStatus("正在加载并试听$ttsName")
         showSpokenText(TTS_PREVIEW_TEXT)
         thread(name = "vehicle-tts-preview") {
             val result = runCatching {
@@ -567,10 +664,10 @@ class MainActivity : Activity() {
             runOnUiThread {
                 button.isEnabled = true
                 result.onSuccess {
-                    statusPanel.text = "状态：试听完成 $ttsName"
+                    showStatus("试听完成：$ttsName", StatusTone.Success)
                     appendLog("TTS 试听完成：$ttsName")
                 }.onFailure { throwable ->
-                    statusPanel.text = "状态：试听失败 ${throwable.message}"
+                    showStatus("试听失败：${throwable.message}", StatusTone.Error)
                     appendLog("TTS 试听失败：${throwable.message}")
                 }
             }
@@ -584,30 +681,41 @@ class MainActivity : Activity() {
 
     private fun selectedTtsName(): String = selectedTtsProvider().displayName
 
-    private fun selectedVehicleSourceConfig(): VehicleDataSourceRuntimeConfig {
-        val host = redisHostInput.text.toString().trim().ifBlank { VehicleDataSourceRuntimeConfig.DEFAULT_REMOTE_HOST }
-        val port = redisPortInput.text.toString().trim().toIntOrNull() ?: VehicleDataSourceRuntimeConfig.DEFAULT_REMOTE_PORT
-        val database = redisDbInput.text.toString().trim().toIntOrNull() ?: 0
-        val password = redisPasswordInput.text.toString().trim().takeIf { it.isNotBlank() }
-        return if (remoteRedisCheckBox.isChecked) {
-            VehicleDataSourceRuntimeConfig(
-                mode = VehicleDataSourceMode.RemoteRedis,
-                host = host,
-                port = port,
-                password = password,
-                database = database,
-                timeoutMs = VehicleDataSourceRuntimeConfig.DEFAULT_TIMEOUT_MS
-            )
-        } else {
-            VehicleDataSourceRuntimeConfig()
+    private fun selectedVehicleSourceConfig(): VehicleDataSourceRuntimeConfig? {
+        if (!remoteRedisCheckBox.isChecked) return VehicleDataSourceRuntimeConfig()
+
+        redisHostInput.error = null
+        redisPortInput.error = null
+        redisDbInput.error = null
+        val host = redisHostInput.text.toString().trim()
+        val port = redisPortInput.text.toString().trim().toIntOrNull()?.takeIf { it in 1..65535 }
+        val database = redisDbInput.text.toString().trim().toIntOrNull()?.takeIf { it >= 0 }
+        if (host.isBlank()) redisHostInput.error = "请输入 Redis 地址"
+        if (port == null) redisPortInput.error = "端口必须是 1–65535"
+        if (database == null) redisDbInput.error = "数据库编号必须是 0 或更大的整数"
+        if (host.isBlank() || port == null || database == null) {
+            showStatus("Redis 配置有误，请检查输入框提示", StatusTone.Error)
+            return null
         }
+        val password = redisPasswordInput.text.toString().trim().takeIf { it.isNotBlank() }
+        return VehicleDataSourceRuntimeConfig(
+            mode = VehicleDataSourceMode.RemoteRedis,
+            host = host,
+            port = port,
+            password = password,
+            database = database,
+            timeoutMs = VehicleDataSourceRuntimeConfig.DEFAULT_TIMEOUT_MS
+        )
     }
 
-    private fun checkVehicleDataConnection() {
+    private fun checkVehicleDataConnection(button: Button) {
         remoteRedisCheckBox.isChecked = true
-        val config = selectedVehicleSourceConfig()
+        val config = selectedVehicleSourceConfig() ?: return
         saveRedisConfig()
-        connectionPanel.text = "连接状态：正在检测 ${config.host}:${config.port}/db${config.database} ..."
+        button.isEnabled = false
+        button.text = "正在检测…"
+        showStatus("正在检测车辆数据连接")
+        connectionPanel.text = "车辆连接：正在检测 ${config.host}:${config.port}/db${config.database}…"
         appendLog("开始检测车辆数据连接：${config.displayName}")
         thread(name = "vehicle-redis-connection-check") {
             val result = runCatching {
@@ -626,6 +734,8 @@ class MainActivity : Activity() {
                 provider.readSnapshot()
             }
             runOnUiThread {
+                button.isEnabled = true
+                button.text = "检测车辆连接"
                 result.onSuccess { snapshot ->
                     val decoded = snapshot.keyStatuses.values.count { it.decoded }
                     val missing = snapshot.keyStatuses.values.count { !it.present }
@@ -636,18 +746,25 @@ class MainActivity : Activity() {
                         snapshot.batterySocPercent?.let { "电量${it}%" },
                         snapshot.cooperativeState?.summary
                     ).joinToString("，").ifBlank { "暂无摘要" }
-                    val message = "连接状态：connected=${snapshot.diagnostics.connected}，decoded=$decoded，missing=$missing，decodeError=$errors；$basic"
+                    val connected = snapshot.diagnostics.connected
+                    val message = "车辆连接：${if (connected) "已连接" else "异常"}；已解码 $decoded，缺失 $missing，解码失败 $errors\n$basic"
                     connectionPanel.text = message
                     vehiclePanel.text = "只读车况：${snapshot.diagnostics.detail} decoded=$decoded missing=$missing error=$errors"
                     cooperationPanel.text = "协作信息：${snapshot.cooperativeState?.summary ?: "未读取"}"
+                    when {
+                        !connected -> showStatus("Redis 连接异常，请检查网络和配置", StatusTone.Error)
+                        decoded == 0 || errors > 0 || missing > 0 ->
+                            showStatus("已连接 Redis，但车辆数据不完整（已解码 $decoded）", StatusTone.Warning)
+                        else -> showStatus("车辆数据连接正常，可以启动语音服务", StatusTone.Success)
+                    }
                     appendLog(message)
                     if (errors > 0 || missing > 0) {
                         appendLog("异常 key：${snapshot.keyStatuses.values.filter { !it.decoded }.take(8).joinToString { "${it.key}:${it.error}" }}")
                     }
                 }.onFailure { throwable ->
-                    val message = "连接状态：失败 ${throwable.message ?: throwable::class.java.simpleName}"
+                    val message = "车辆连接：失败\n${throwable.message ?: throwable::class.java.simpleName}\n请确认设备与 Redis 同网，并检查地址和端口。"
                     connectionPanel.text = message
-                    statusPanel.text = "状态：Redis 连接失败"
+                    showStatus("车辆数据连接失败，请检查网络和配置", StatusTone.Error)
                     appendLog(message)
                 }
             }
@@ -689,11 +806,10 @@ class MainActivity : Activity() {
         if (!::ttsConfigStatus.isInitialized) return
         val selected = selectedTtsProvider()
         ttsConfigStatus.text = message ?: buildString {
-            append("当前：${selected.displayName}。")
-            append("Edge 免注册但需要联网；")
-            append("百度${if (ttsConfig.baidu == null) "未配置" else "已配置"}；")
-            append("腾讯云${if (ttsConfig.tencent == null) "未配置" else "已配置"}。")
-            append("在线语音失败会尝试系统 TTS；仍失败时播放固定提示，并保留屏幕文字。")
+            appendLine("当前语音：${selected.displayName}")
+            append("Edge 需要联网；百度${if (ttsConfig.baidu == null) "未配置" else "已配置"}，")
+            appendLine("腾讯云${if (ttsConfig.tencent == null) "未配置" else "已配置"}。")
+            append("在线语音失败时会尝试系统 TTS，仍失败则播放固定提示并保留屏幕文字。")
         }
     }
 
@@ -718,16 +834,16 @@ class MainActivity : Activity() {
     }
 
     private fun clearTtsConfig() {
-        statusPanel.text = "状态：正在清除 TTS 配置"
+        showStatus("正在清除 TTS 配置")
         thread(name = "vehicle-tts-config-clear") {
             val result = runCatching { TtsConfigStore(this).clear() }
             runOnUiThread {
                 result.onSuccess {
                     ttsConfig = OnlineTtsConfig()
                     refreshTtsChoices(TtsProvider.Edge)
-                    statusPanel.text = "状态：TTS 配置已清除"
+                    showStatus("TTS 配置已清除", StatusTone.Success)
                 }.onFailure { throwable ->
-                    statusPanel.text = "状态：清除 TTS 配置失败 ${throwable.message}"
+                    showStatus("清除 TTS 配置失败：${throwable.message}", StatusTone.Error)
                 }
             }
         }
@@ -738,7 +854,7 @@ class MainActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != REQUEST_TTS_CONFIG || resultCode != RESULT_OK) return
         val uri = data?.data ?: return
-        statusPanel.text = "状态：正在导入 TTS 配置"
+        showStatus("正在导入 TTS 配置")
         thread(name = "vehicle-tts-config-import") {
             val result = runCatching {
                 val config = OnlineTtsConfig.parse(readTtsConfig(uri))
@@ -749,10 +865,10 @@ class MainActivity : Activity() {
                 result.onSuccess { config ->
                     ttsConfig = config
                     refreshTtsChoices(config.defaultProvider)
-                    statusPanel.text = "状态：TTS 配置导入成功"
+                    showStatus("TTS 配置导入成功", StatusTone.Success)
                     appendLog("TTS 配置导入成功，未记录凭据内容")
                 }.onFailure { throwable ->
-                    statusPanel.text = "状态：TTS 配置导入失败 ${throwable.message}"
+                    showStatus("TTS 配置导入失败：${throwable.message}", StatusTone.Error)
                     updateTtsConfigStatus("配置未导入：${throwable.message}")
                 }
             }
@@ -796,7 +912,7 @@ class MainActivity : Activity() {
             if (pendingStartAfterPermission) startVoiceService(pendingModeAfterPermission)
         } else {
             appendLog("权限被拒绝，未启动真实麦克风相关服务：${denied.joinToString()}")
-            statusPanel.text = "状态：权限被拒绝"
+            showStatus("麦克风或通知权限被拒绝，语音服务未启动", StatusTone.Error)
         }
         pendingStartAfterPermission = false
         pendingModeAfterPermission = VoiceRuntimeMode.PreviewMock
@@ -805,7 +921,7 @@ class MainActivity : Activity() {
     private fun stopVoiceService() {
         stopService(Intent(this, VoiceForegroundService::class.java))
         appendLog("已发送停止服务命令")
-        statusPanel.text = "状态：已发送停止服务命令"
+        showStatus("语音服务已停止")
     }
 
     private fun appendLog(line: String) {

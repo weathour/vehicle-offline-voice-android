@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AskableVoiceContentTest {
-    private val parser = RuleIntentParser()
+    private val parser = RuleIntentParser(allowedIntentNames = RuleIntentParser.SIX_QUERY_INTENTS)
 
     @Test
     fun visibleSupportedQuestionsMatchParserIntents() {
@@ -19,27 +19,16 @@ class AskableVoiceContentTest {
     }
 
     @Test
-    fun visibleContentIncludesCaveatedAndDeferredRealVehicleSections() {
-        val titles = AskableVoiceContent.categories.map { it.title }
-
-        assertTrue(titles.contains("定位、感知与轨迹"))
-        assertTrue(titles.contains("Redis 数据诊断"))
-        assertTrue(titles.contains("暂缓或降级问答"))
-        assertEquals("本轮不启用", AskableVoiceContent.categories.last().title)
-        assertTrue(AskableVoiceContent.visiblePhraseList.contains("打开空调等控制写入"))
-        assertFalse(AskableVoiceContent.stableQuestions.any { it.phrase == "ACC 状态" })
+    fun visibleContentIsExactlyTheSixApprovedReadOnlyQueries() {
+        assertEquals(1, AskableVoiceContent.categories.size)
+        assertEquals("六类只读查询", AskableVoiceContent.categories.single().title)
+        assertEquals(6, AskableVoiceContent.supportedQuestions.size)
+        assertEquals(RuleIntentParser.SIX_QUERY_INTENTS, AskableVoiceContent.supportedQuestions.map { it.intent }.toSet())
+        assertFalse(AskableVoiceContent.supportedQuestions.any { it.phrase.contains("续航") })
     }
 
     @Test
-    fun releaseContentOnlyShowsStableAndCaveatedQuestions() {
-        val categories = AskableVoiceContent.releaseCategories
-        val levels = categories.flatMap { it.questions }.map { it.level }.toSet()
-
-        assertTrue(levels.all {
-            it == AskableVoiceContent.CapabilityLevel.Stable ||
-                it == AskableVoiceContent.CapabilityLevel.Caveated
-        })
-        assertFalse(categories.any { it.title == "暂缓或降级问答" })
-        assertFalse(categories.any { it.title == "本轮不启用" })
+    fun visibleQuestionsContainNoDeferredEntries() {
+        assertTrue(AskableVoiceContent.supportedQuestions.all { !it.intent.startsWith("deferred_") })
     }
 }

@@ -2,6 +2,7 @@ package com.company.vehiclevoice.asr
 
 import com.company.vehiclevoice.audio.PcmFrame
 import com.company.vehiclevoice.audio.toLittleEndianPcm16Bytes
+import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
 import java.io.File
@@ -10,7 +11,8 @@ import java.io.File
 class VoskOfflineAsrEngine(
     modelPath: String,
     private val sampleRateHz: Float = PcmFrame.DEFAULT_SAMPLE_RATE_HZ.toFloat(),
-    private val grammar: List<String>? = null
+    private val grammar: List<String>? = null,
+    private val maxAlternatives: Int = 5
 ) : AsrEngine, AutoCloseable {
     private val model: Model
 
@@ -19,6 +21,7 @@ class VoskOfflineAsrEngine(
         require(modelDir.exists() && modelDir.isDirectory) {
             "Vosk model directory is missing: $modelPath. Package or copy an offline model before using VoskOfflineAsrEngine."
         }
+        require(maxAlternatives > 0) { "maxAlternatives must be positive" }
         model = Model(modelDir.absolutePath)
     }
 
@@ -27,9 +30,7 @@ class VoskOfflineAsrEngine(
         newRecognizer().use { recognizer ->
             val bytes = frames.toLittleEndianPcm16Bytes()
             recognizer.acceptWaveForm(bytes, bytes.size)
-            val json = recognizer.finalResult
-            val text = extractJsonField(json, "text")
-            return AsrResult(text = text, confidence = if (text.isBlank()) 0.0 else 0.80)
+            return parseResultJson(recognizer.finalResult)
         }
     }
 
@@ -37,10 +38,12 @@ class VoskOfflineAsrEngine(
         model.close()
     }
 
-    private fun newRecognizer(): Recognizer = if (grammar.isNullOrEmpty()) {
+    private fun newRecognizer(): Recognizer = (if (grammar.isNullOrEmpty()) {
         Recognizer(model, sampleRateHz)
     } else {
         Recognizer(model, sampleRateHz, grammarJson(grammar + "[unk]"))
+    }).apply {
+        setMaxAlternatives(maxAlternatives)
     }
 
     private fun grammarJson(phrases: List<String>): String =
@@ -48,108 +51,63 @@ class VoskOfflineAsrEngine(
             "\"${phrase.replace("\\", "\\\\").replace("\"", "\\\"")}\""
         }
 
-    private fun extractJsonField(json: String, field: String): String {
-        val match = Regex("\\\"$field\\\"\\s*:\\s*\\\"(.*?)\\\"").find(json) ?: return ""
-        return match.groupValues[1]
-            .replace("\\\"", "\"")
-            .replace("\\\\", "\\")
-            .trim()
-    }
-
     companion object {
-        val DEFAULT_COMMAND_GRAMMAR = listOf(
-            "打开空调",
-            "开启空调",
-            "关闭空调",
-            "关掉空调",
-            "打开车窗",
-            "关闭车窗",
-            "调高温度",
-            "调低温度",
-            "查询状态",
-            "当前状态",
-            "Redis状态",
-            "Redis健康",
-            "数据健康",
-            "实车数据健康",
-            "数据新鲜度",
-            "时间戳状态",
-            "Key诊断",
-            "缺哪些Key",
-            "当前车速多少",
-            "车速多少",
-            "速度多少",
-            "当前档位",
-            "电量多少",
-            "还有多少电",
-            "电池详情",
-            "电池电压",
-            "电池电流",
-            "剩余里程",
-            "还能跑多远",
-            "空调状态",
-            "空调开了吗",
-            "当前温度",
-            "车内温度",
-            "车门关了吗",
-            "当前位置",
-            "RTK状态",
-            "RTK标志",
-            "车辆姿态",
-            "俯仰横滚",
-            "前方有没有障碍物",
-            "障碍物数量",
-            "最近障碍物",
-            "红绿灯",
-            "交通灯",
-            "车道线状态",
-            "车道线数量",
-            "规划轨迹",
-            "轨迹点",
-            "胎压正常吗",
-            "胎压状态",
-            "智能驾驶状态",
-            "自动驾驶状态",
-            "ACC状态",
-            "LKA状态",
-            "为什么不能进入自动驾驶",
-            "为什么退出自动驾驶",
-            "有没有需要接管",
-            "当前有什么告警",
-            "有没有告警",
-            "SAM状态",
-            "SAM反馈",
-            "协作模块状态",
-            "当前协作场景是什么",
-            "协作场景是什么",
-            "现在是什么协作场景",
-            "现在什么协作场景",
-            "当前写作场景是什么",
-            "写作场景是什么",
-            "协同场景是什么",
-            "合作场景是什么",
-            "V2V还是V2I",
-            "协作事件开始了吗",
-            "协作事件状态",
-            "协作进行了吗",
-            "协作结束了吗",
-            "现在有几辆协作车",
-            "几辆协作车",
-            "协作车数量",
-            "现在有几辆写作车",
-            "引导决策是什么",
-            "协作反馈结果是什么",
-            "当前协作行为是什么",
-            "写作反馈结果是什么",
-            "瑞迪斯状态",
-            "瑞迪思健康",
-            "二梯开状态",
-            "阿提开标志",
-            "山姆状态",
-            "三姆反馈",
-            "车到线状态",
-            "归迹点",
-            "新鲜读"
+        /** Character/word segmented because Vosk runtime grammar splits phrases on spaces. */
+        val SIX_QUERY_GRAMMAR = listOf(
+            // 车速
+            "车 速", "车 速 多 少", "当 前 车 速", "现 在 车 速", "速 度 多 少", "跑 多 快",
+            "车 素 多 少", "车 数 多 少", "车 宿 多 少", "测 速 多 少", "时 速 多 少",
+            // 电量
+            "电 量", "电 量 多 少", "当 前 电 量", "还 有 多 少 电", "剩 多 少 电", "电 池 电 量",
+            "店 量 多 少", "电 亮 多 少", "电 粮 多 少", "艾 斯 欧 西",
+            // 障碍物
+            "障 碍 物", "障 碍 物 情 况", "有 没 有 障 碍 物", "前 方 障 碍 物", "最 近 障 碍 物", "障 碍 物 数 量",
+            "障 爱 物 情 况", "张 碍 物 情 况", "长 碍 物 情 况", "障 碍 我 情 况",
+            // 协同模块 / Sensor_SAM
+            "协 同 模 块", "协 同 模 块 状 态", "协 作 模 块 状 态", "合 作 模 块 状 态", "协 同 状 态",
+            "SAM 状 态", "山 姆 状 态", "三 姆 状 态", "萨 姆 状 态",
+            // 规划轨迹点
+            "规 划 轨 迹", "规 划 轨 迹 点", "轨 迹 点", "轨 迹 点 多 少", "轨 迹 有 多 少 点", "当 前 轨 迹",
+            "归 迹 点", "规 迹 点", "轨 机 点", "诡 计 点",
+            // 红绿灯
+            "红 绿 灯", "红 绿 灯 状 态", "红 绿 灯 什 么 状 态", "红 绿 灯 什 么 颜 色", "交 通 灯 状 态", "信 号 灯 状 态",
+            "红 路 灯 状 态", "红 女 灯 状 态", "交 通 等 状 态", "信 号 等 状 态"
         )
+
+        internal fun parseResultJson(json: String): AsrResult = runCatching {
+            val root = JSONObject(json)
+            val array = root.optJSONArray("alternatives")
+            val alternatives = buildList {
+                if (array != null) {
+                    for (index in 0 until array.length()) {
+                        val item = array.optJSONObject(index) ?: continue
+                        add(
+                            AsrAlternative(
+                                text = item.optString("text", "").trim(),
+                                confidence = item.optDouble("confidence", 0.0)
+                            )
+                        )
+                    }
+                }
+            }
+            val primary = alternatives.firstOrNull()
+            val text = primary?.text ?: root.optString("text", "").trim()
+            AsrResult(
+                text = text,
+                confidence = primary?.confidence ?: if (text.isBlank()) 0.0 else 0.80,
+                alternatives = alternatives
+            )
+        }.getOrElse {
+            val text = extractJsonField(json, "text")
+            AsrResult(text = text, confidence = if (text.isBlank()) 0.0 else 0.80)
+        }
+
+        private fun extractJsonField(json: String, field: String): String {
+            val match = Regex("\\\"$field\\\"\\s*:\\s*\\\"(.*?)\\\"").find(json) ?: return ""
+            return match.groupValues[1]
+                .replace("\\\"", "\"")
+                .replace("\\\\", "\\")
+                .trim()
+        }
     }
 }

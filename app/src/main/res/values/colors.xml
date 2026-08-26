@@ -1,3 +1,21 @@
 <resources>
-    <color name="notification_icon_bg">#1E3A8A</color>
+    <color name="app_background">#F3F6FA</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_muted">#E7EDF4</color>
+    <color name="ink">#0F172A</color>
+    <color name="ink_muted">#475569</color>
+    <color name="border">#CBD5E1</color>
+    <color name="primary">#1D4ED8</color>
+    <color name="primary_dark">#1E3A8A</color>
+    <color name="on_primary">#FFFFFF</color>
+    <color name="speech_background">#EFF6FF</color>
+    <color name="status_info_background">#E8F0FE</color>
+    <color name="status_info_text">#1E3A8A</color>
+    <color name="status_success_background">#ECFDF3</color>
+    <color name="status_success_text">#166534</color>
+    <color name="status_warning_background">#FFF7E6</color>
+    <color name="status_warning_text">#92400E</color>
+    <color name="status_error_background">#FEF2F2</color>
+    <color name="status_error_text">#B42318</color>
+    <color name="launcher_background">#1E3A8A</color>
 </resources>

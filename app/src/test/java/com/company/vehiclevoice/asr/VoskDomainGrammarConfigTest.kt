@@ -1,42 +1,45 @@
 package com.company.vehiclevoice.asr
 
+import com.company.vehiclevoice.nlu.RuleIntentParser
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
 class VoskDomainGrammarConfigTest {
     @Test
-    fun defaultCommandGrammarIncludesCooperationAsrConfusions() {
-        assertTrue(VoskOfflineAsrEngine.DEFAULT_COMMAND_GRAMMAR.contains("当前协作场景是什么"))
-        assertTrue(VoskOfflineAsrEngine.DEFAULT_COMMAND_GRAMMAR.contains("当前写作场景是什么"))
-        assertTrue(VoskOfflineAsrEngine.DEFAULT_COMMAND_GRAMMAR.contains("协同场景是什么"))
-        assertTrue(VoskOfflineAsrEngine.DEFAULT_COMMAND_GRAMMAR.contains("合作场景是什么"))
-    }
-
-    @Test
-    fun defaultCommandGrammarIncludesRealVehicleRedisAndHomophoneTerms() {
-        listOf(
-            "Redis状态",
-            "数据新鲜度",
-            "Key诊断",
-            "RTK状态",
-            "SAM状态",
-            "车道线状态",
-            "规划轨迹",
-            "瑞迪斯状态",
-            "二梯开状态",
-            "山姆状态",
-            "车到线状态",
-            "归迹点"
-        ).forEach { phrase ->
-            assertTrue("missing grammar phrase $phrase", VoskOfflineAsrEngine.DEFAULT_COMMAND_GRAMMAR.contains(phrase))
+    fun sixQueryGrammarIsSegmentedAndMapsOnlyToTheApprovedIntents() {
+        val parser = RuleIntentParser(allowedIntentNames = RuleIntentParser.SIX_QUERY_INTENTS)
+        val parsed = VoskOfflineAsrEngine.SIX_QUERY_GRAMMAR.associateWith { phrase ->
+            parser.parse(phrase).intent.name
         }
+
+        assertTrue(parsed.keys.all { it.contains(' ') })
+        assertFalse(parsed.entries.any { it.value == "fallback" })
+        assertEquals(RuleIntentParser.SIX_QUERY_INTENTS, parsed.values.toSet())
     }
 
     @Test
-    fun realMicPipelineKeepsOpenModelUntilSegmentedGrammarIsProven() {
+    fun sixQueryGrammarIncludesKnownConfusionsButNoSingleSoundShortcuts() {
+        listOf(
+            "车 素 多 少",
+            "店 量 多 少",
+            "张 碍 物 情 况",
+            "山 姆 状 态",
+            "归 迹 点",
+            "红 路 灯 状 态"
+        ).forEach { phrase ->
+            assertTrue("missing grammar phrase $phrase", VoskOfflineAsrEngine.SIX_QUERY_GRAMMAR.contains(phrase))
+        }
+        assertFalse(VoskOfflineAsrEngine.SIX_QUERY_GRAMMAR.any { it in setOf("u", "灯", "电", "点") })
+    }
+
+    @Test
+    fun realMicPipelineUsesTheSegmentedGrammarAndRestrictedParser() {
         val source = File("src/main/java/com/company/vehiclevoice/core/VoicePipelineFactory.kt").readText()
 
-        assertTrue(source.contains("asrEngine = VoskOfflineAsrEngine(modelPath = modelPath)"))
+        assertTrue(source.contains("grammar = VoskOfflineAsrEngine.SIX_QUERY_GRAMMAR"))
+        assertTrue(source.contains("RuleIntentParser(allowedIntentNames = RuleIntentParser.SIX_QUERY_INTENTS)"))
     }
 }

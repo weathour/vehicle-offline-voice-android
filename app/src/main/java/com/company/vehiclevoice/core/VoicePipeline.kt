@@ -4,6 +4,7 @@ import com.company.vehiclevoice.action.UnityActionJsonEncoder
 import com.company.vehiclevoice.action.UnityActionMapper
 import com.company.vehiclevoice.action.UnityEventSink
 import com.company.vehiclevoice.asr.AsrEngine
+import com.company.vehiclevoice.asr.AsrResult
 import com.company.vehiclevoice.audio.AudioSource
 import com.company.vehiclevoice.audio.PcmFrame
 import com.company.vehiclevoice.data.VehicleStateProjector
@@ -14,10 +15,56 @@ import com.company.vehiclevoice.kws.KeywordEvent
 import com.company.vehiclevoice.kws.KeywordSpotter
 import com.company.vehiclevoice.log.EventLogSink
 import com.company.vehiclevoice.nlu.IntentParser
+import com.company.vehiclevoice.nlu.ParseResult
+import com.company.vehiclevoice.nlu.VoiceIntent
 import com.company.vehiclevoice.template.ReplyTemplateEngine
 import com.company.vehiclevoice.tts.TtsEngine
 import com.company.vehiclevoice.vad.VadEngine
 import com.company.vehiclevoice.vad.VadEvent
+import kotlin.math.exp
+
+private const val MIN_NBEST_WINNER_SHARE = 0.55
+private const val MIN_NBEST_MARGIN = 0.15
+
+internal fun resolveAsrIntent(asr: AsrResult, parser: IntentParser): ParseResult {
+    val primary = parser.parse(asr.text)
+    if (primary.intent == VoiceIntent.Unsafe || asr.alternatives.size < 2) return primary
+
+    data class WeightedCandidate(val parse: ParseResult, val weight: Double, val rawConfidence: Double)
+
+    val rawConfidences = asr.alternatives.mapIndexed { index, alternative ->
+        alternative.confidence.takeIf { it.isFinite() } ?: -index.toDouble()
+    }
+    val maxConfidence = rawConfidences.maxOrNull() ?: return primary
+    val weighted = asr.alternatives.mapIndexed { index, alternative ->
+        WeightedCandidate(
+            parse = parser.parse(alternative.text),
+            weight = exp((rawConfidences[index] - maxConfidence).coerceIn(-50.0, 0.0)),
+            rawConfidence = rawConfidences[index]
+        )
+    }
+    val totalWeight = weighted.sumOf { it.weight }
+    val ranked = weighted
+        .filterNot { it.parse.intent == VoiceIntent.Fallback }
+        .groupBy { it.parse.intent.name }
+        .map { (intentName, candidates) -> intentName to candidates }
+        .sortedByDescending { (_, candidates) -> candidates.sumOf { it.weight } }
+    val winner = ranked.firstOrNull() ?: return primary
+    val winnerShare = winner.second.sumOf { it.weight } / totalWeight
+    val runnerUpShare = ranked.getOrNull(1)?.second?.sumOf { it.weight }?.div(totalWeight) ?: 0.0
+    if (winnerShare < MIN_NBEST_WINNER_SHARE || winnerShare - runnerUpShare < MIN_NBEST_MARGIN) {
+        return ParseResult(
+            intent = VoiceIntent.Fallback,
+            replyKey = "fallback",
+            confidence = 0.0,
+            reason = "nbest_ambiguous"
+        )
+    }
+    return winner.second.maxBy { it.rawConfidence }.parse.copy(
+        confidence = winnerShare,
+        reason = "nbest_consensus"
+    )
+}
 
 data class VoicePipelineResult(
     val wakeDetected: Boolean,
@@ -256,8 +303,15 @@ class VoicePipeline(
     private fun handleUtterance(frames: List<PcmFrame>): VoicePipelineResult {
         val asr = asrEngine.recognize(frames)
         logSink.info("ASR text=${asr.text} confidence=${asr.confidence}")
-        val parse = intentParser.parse(asr.text)
-        logSink.info("NLU intent=${parse.intent.name} reason=${parse.reason}")
+        if (asr.alternatives.size > 1) {
+            logSink.info(
+                "ASR alternatives=" + asr.alternatives.joinToString(" | ") {
+                    "${it.text}:${it.confidence}"
+                }
+            )
+        }
+        val parse = resolveAsrIntent(asr, intentParser)
+        logSink.info("NLU intent=${parse.intent.name} confidence=${parse.confidence} reason=${parse.reason}")
         refreshReadOnlyVehicleStateIfNeeded(parse.intent.name)
         if (parse.isActionable && !allowVehicleControlActions) {
             val reply = "实车只读模式仅支持查询，已拒绝执行车控指令"

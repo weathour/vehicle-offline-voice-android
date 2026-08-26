@@ -1,7 +1,11 @@
 package com.company.vehiclevoice.nlu
 
-class RuleIntentParser : IntentParser {
-    override fun parse(text: String): ParseResult {
+class RuleIntentParser(
+    private val allowedIntentNames: Set<String>? = null
+) : IntentParser {
+    override fun parse(text: String): ParseResult = restrict(parseAny(text))
+
+    private fun parseAny(text: String): ParseResult {
         val normalized = normalize(text)
         if (normalized.isBlank()) return fallback("empty_asr")
         if (containsUnsafeText(normalized)) {
@@ -79,8 +83,8 @@ class RuleIntentParser : IntentParser {
             matchesAny(normalized, "最近障碍物", "最近目标", "最近的障碍物", "最近的目标", "最近障碍物距离") ||
                 (hasAny(normalized, OBSTACLE_TERMS) && hasAny(normalized, listOf("最近", "最近的", "距离", "离我最近"))) ->
                 query("vehicle_nearest_obstacle_query", "nearest_obstacle")
-            matchesAny(normalized, "前方有没有障碍物", "有没有障碍物", "最近障碍物", "前方目标") ||
-                topicQuery(normalized, OBSTACLE_TERMS, listOf("有没有", "有", "前方", "最近", "目标", "状态")) ->
+            matchesAny(normalized, "障碍物情况", "前方有没有障碍物", "有没有障碍物", "最近障碍物", "前方目标") ||
+                topicQuery(normalized, OBSTACLE_TERMS, listOf("有没有", "有", "前方", "最近", "目标", "状态", "情况")) ->
                 query("vehicle_obstacle_query", "obstacle")
             matchesAny(normalized, "规划轨迹", "轨迹点", "轨迹长度", "当前轨迹", "计划轨迹", "轨迹有多少点") ||
                 topicQuery(normalized, TRAJECTORY_TERMS, listOf("多少", "几个", "点", "长度", "当前", "现在", "状态", "规划", "计划")) ->
@@ -115,7 +119,7 @@ class RuleIntentParser : IntentParser {
             matchesAny(normalized, "有故障吗", "有没有故障", "当前故障", "车辆告警", "有什么告警", "有没有告警", "急停了吗") ||
                 topicQuery(normalized, FAULT_TERMS, listOf("有", "有没有", "什么", "当前", "现在", "吗", "状态")) ->
                 query("vehicle_fault_query", "fault")
-            matchesAny(normalized, "sam状态", "sam反馈", "sam实车状态", "sensor_sam状态", "协作模块状态", "实车协作状态") ||
+            matchesAny(normalized, "sam状态", "sam反馈", "sam实车状态", "sensor_sam状态", "协作模块状态", "协作状态", "实车协作状态") ||
                 topicQuery(normalized, SAM_TERMS, listOf("状态", "反馈", "实车", "当前", "现在", "模式", "车速", "转向", "档位")) ->
                 query("vehicle_sam_status_query", "sam_status")
             matchesAny(
@@ -158,6 +162,17 @@ class RuleIntentParser : IntentParser {
                 query("status_query", "vehicle_state")
             else -> fallback("no_rule_match")
         }
+    }
+
+    private fun restrict(result: ParseResult): ParseResult {
+        val allowed = allowedIntentNames ?: return result
+        if (result.intent == VoiceIntent.Fallback || result.intent == VoiceIntent.Unsafe) return result
+        val canonical = when (result.intent.name) {
+            "vehicle_obstacle_count_query", "vehicle_nearest_obstacle_query" ->
+                query("vehicle_obstacle_query", "obstacle").copy(reason = "closed_set_alias")
+            else -> result
+        }
+        return canonical.takeIf { it.intent.name in allowed } ?: fallback("intent_outside_allowed_set")
     }
 
     private fun normalize(text: String): String {
@@ -211,6 +226,15 @@ class RuleIntentParser : IntentParser {
     }
 
     companion object {
+        val SIX_QUERY_INTENTS = setOf(
+            "vehicle_speed_query",
+            "vehicle_battery_query",
+            "vehicle_obstacle_query",
+            "vehicle_sam_status_query",
+            "vehicle_trajectory_query",
+            "vehicle_traffic_light_query"
+        )
+
         private val DOMAIN_TERM_CORRECTIONS = listOf(
             // General vehicle domain homophones / near words observed or expected from small
             // offline Chinese ASR. These are still gated by downstream topic+question matching.

@@ -9,5 +9,11 @@ interface AsrEngine {
 data class AsrResult(
     val text: String,
     val confidence: Double = 1.0,
-    val isFinal: Boolean = true
+    val isFinal: Boolean = true,
+    val alternatives: List<AsrAlternative> = emptyList()
+)
+
+data class AsrAlternative(
+    val text: String,
+    val confidence: Double
 )

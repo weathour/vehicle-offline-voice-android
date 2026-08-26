@@ -20,6 +20,7 @@ import com.company.vehiclevoice.kws.ScriptedKeywordSpotter
 import com.company.vehiclevoice.kws.VirtualPcmKeywordSpotter
 import com.company.vehiclevoice.kws.VoskKeywordSpotter
 import com.company.vehiclevoice.log.EventLogSink
+import com.company.vehiclevoice.nlu.IntentParser
 import com.company.vehiclevoice.nlu.RuleIntentParser
 import com.company.vehiclevoice.template.ReplyTemplateEngine
 import com.company.vehiclevoice.tts.MockTtsEngine
@@ -113,12 +114,11 @@ object VoicePipelineFactory {
         return createPipeline(
             audioSource = AndroidAudioRecordSource(permissionGranted = realMicPermissionGranted),
             keywordSpotter = VoskKeywordSpotter(modelPath = modelPath),
-            // Keep the real microphone ASR open-model for the current Chinese Vosk model.
-            // Passing unsegmented Chinese phrases as restricted grammar makes Vosk treat each
-            // full phrase as an out-of-vocabulary word and can collapse recognition to "[unk]".
-            // Domain robustness is handled in RuleIntentParser normalization until we add a
-            // tested segmented grammar / custom language model.
-            asrEngine = VoskOfflineAsrEngine(modelPath = modelPath),
+            asrEngine = VoskOfflineAsrEngine(
+                modelPath = modelPath,
+                grammar = VoskOfflineAsrEngine.SIX_QUERY_GRAMMAR
+            ),
+            intentParser = RuleIntentParser(allowedIntentNames = RuleIntentParser.SIX_QUERY_INTENTS),
             ttsEngine = ttsEngineFactory(),
             logSink = logSink,
             readOnlySnapshotProvider = readOnlySnapshotProvider,
@@ -132,6 +132,7 @@ object VoicePipelineFactory {
         audioSource: AudioSource,
         keywordSpotter: com.company.vehiclevoice.kws.KeywordSpotter,
         asrEngine: AsrEngine = ScriptedAsrEngine.single("打开空调"),
+        intentParser: IntentParser = RuleIntentParser(),
         ttsEngine: TtsEngine = MockTtsEngine(),
         logSink: EventLogSink,
         readOnlySnapshotProvider: VehicleReadOnlySnapshotProvider? = RedisVehicleSnapshotProvider.simulated(),
@@ -143,7 +144,7 @@ object VoicePipelineFactory {
         keywordSpotter = keywordSpotter,
         vadEngine = EnergyVadEngine(),
         asrEngine = asrEngine,
-        intentParser = RuleIntentParser(),
+        intentParser = intentParser,
         stateStore = MockRedisStore(),
         stateProjector = VehicleStateProjector(),
         replyTemplateEngine = ReplyTemplateEngine(),

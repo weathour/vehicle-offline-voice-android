@@ -147,7 +147,7 @@ class VoiceForegroundService : Service() {
         }
 
         return builder
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setSmallIcon(R.drawable.ic_notification_voice)
             .setContentTitle(getString(com.company.vehiclevoice.R.string.voice_service_notification_title))
             .setContentText(getString(com.company.vehiclevoice.R.string.voice_service_notification_text))
             .setOngoing(true)
