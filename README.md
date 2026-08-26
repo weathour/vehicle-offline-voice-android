@@ -1,16 +1,18 @@
 # 渝行智声车载语音交互软件
 
-“渝行智声”v1.4 面向手机和车载 Android 终端。设备连接车辆只读 Redis 数据源后，可用离线语音识别查询车速、电量、告警和协作场景，并通过可选 TTS 播报回答。
+“渝行智声”v1.5 面向手机和车载 Android 终端。设备连接车辆只读 Redis 数据源后，可用离线语音识别查询车速、电量、障碍物、协同模块、规划轨迹点和红绿灯，并通过可选 TTS 播报回答。
 
 著作权人：长安大学。主要开发人员：杨兴杰、陈婷、徐志刚、王嘉鑫、申丹丹。正式包名：`cn.edu.chd.yuxingvoice`。
 
 ## 当前能力
 
 - 唤醒词、VAD、Vosk ASR 和规则 NLU 全部离线运行。
+- 正式语音入口仅开放六类只读查询；领域语法覆盖常见错字、同音和近音结果，同时拒绝单个元音、单字及冲突问法。
 - 可选 Edge、百度、腾讯云三种在线 TTS，或设备自带的 Android 系统 TTS。
 - Edge 默认免注册；百度和腾讯云通过用户提供的 JSON 配置启用，密钥导入后由 Android Keystore 加密保存，不进入 APK、日志或普通偏好设置。
 - 在线 TTS 失败时自动尝试系统 TTS；仍不可用时播放固定 WAV 提示。
 - 主界面始终显示“当前播报内容”。即使设备没有 TTS、没有网络或凭据失效，回答文字仍可读取。
+- 主界面针对手机和大尺寸竖屏自适应排列，持续显示服务状态、车辆连接和最近识别文本。
 - TTS 播放期间暂停麦克风采集，避免扬声器回声再次进入识别链路。
 - 车辆数据访问只执行 Redis `GET`，当前版本不发真实车辆控制命令。
 
@@ -24,7 +26,7 @@
    - **Android 系统语音**：设备已安装中文 TTS 时可用。
 4. 点击 **试听当前语音**。
 5. 点击 **检测车辆数据连接**，确认 `connected=true` 且解码状态正常。
-6. 点击 **启动语音服务**，说“小车小车，当前车速多少”等查询。
+6. 点击 **启动语音服务**，询问车速、电量、障碍物、协同模块、规划轨迹点或红绿灯。
 
 ## TTS 配置文件
 
@@ -78,7 +80,7 @@ Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。
 ## 文档入口
 
 - 架构说明：[`docs/architecture.md`](docs/architecture.md)
-- v1.4 发布说明：[`docs/releases/v1.4-configurable-online-tts.md`](docs/releases/v1.4-configurable-online-tts.md)
+- v1.5 发布说明：[`docs/releases/v1.5-six-query-tablet-ui.md`](docs/releases/v1.5-six-query-tablet-ui.md)
 - 开发环境：[`docs/development-environment.md`](docs/development-environment.md)
 - 语音链路：[`docs/voice-pipeline.md`](docs/voice-pipeline.md)
 - 第三方软件：[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
