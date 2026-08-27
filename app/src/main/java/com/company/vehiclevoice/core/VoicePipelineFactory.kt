@@ -116,9 +116,9 @@ object VoicePipelineFactory {
             keywordSpotter = VoskKeywordSpotter(modelPath = modelPath),
             asrEngine = VoskOfflineAsrEngine(
                 modelPath = modelPath,
-                grammar = VoskOfflineAsrEngine.SIX_QUERY_GRAMMAR
+                grammar = VoskOfflineAsrEngine.FOUR_QUERY_GRAMMAR
             ),
-            intentParser = RuleIntentParser(allowedIntentNames = RuleIntentParser.SIX_QUERY_INTENTS),
+            intentParser = RuleIntentParser(allowedIntentNames = RuleIntentParser.FOUR_QUERY_INTENTS),
             ttsEngine = ttsEngineFactory(),
             logSink = logSink,
             readOnlySnapshotProvider = readOnlySnapshotProvider,

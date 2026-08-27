@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AskableVoiceContentTest {
-    private val parser = RuleIntentParser(allowedIntentNames = RuleIntentParser.SIX_QUERY_INTENTS)
+    private val parser = RuleIntentParser(allowedIntentNames = RuleIntentParser.FOUR_QUERY_INTENTS)
 
     @Test
     fun visibleSupportedQuestionsMatchParserIntents() {
@@ -19,12 +19,12 @@ class AskableVoiceContentTest {
     }
 
     @Test
-    fun visibleContentIsExactlyTheSixApprovedReadOnlyQueries() {
+    fun visibleContentIsExactlyTheFourApprovedReadOnlyQueries() {
         assertEquals(1, AskableVoiceContent.categories.size)
-        assertEquals("六类只读查询", AskableVoiceContent.categories.single().title)
-        assertEquals(6, AskableVoiceContent.supportedQuestions.size)
-        assertEquals(RuleIntentParser.SIX_QUERY_INTENTS, AskableVoiceContent.supportedQuestions.map { it.intent }.toSet())
-        assertFalse(AskableVoiceContent.supportedQuestions.any { it.phrase.contains("续航") })
+        assertEquals("四类只读查询", AskableVoiceContent.categories.single().title)
+        assertEquals(4, AskableVoiceContent.supportedQuestions.size)
+        assertEquals(RuleIntentParser.FOUR_QUERY_INTENTS, AskableVoiceContent.supportedQuestions.map { it.intent }.toSet())
+        assertFalse(AskableVoiceContent.supportedQuestions.any { it.phrase.contains("电量") || it.phrase.contains("轨迹") })
     }
 
     @Test

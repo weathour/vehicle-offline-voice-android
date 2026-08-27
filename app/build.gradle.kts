@@ -11,8 +11,8 @@ android {
         applicationId = "cn.edu.chd.yuxingvoice"
         minSdk = 26
         targetSdk = 35
-        versionCode = 15
-        versionName = "v1.5"
+        versionCode = 16
+        versionName = "v1.6"
 
         testInstrumentationRunner = "android.app.Instrumentation"
     }

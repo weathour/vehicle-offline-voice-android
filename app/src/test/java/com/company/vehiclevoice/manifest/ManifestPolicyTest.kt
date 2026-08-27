@@ -43,4 +43,29 @@ class ManifestPolicyTest {
         assertTrue(source.contains("if (\"ASR text=\" in line)"))
         assertTrue(source.contains("未识别到语音"))
     }
+
+    @Test
+    fun releasePath_rejectsDirectActivityStartsAndMovesBehindAfterServiceStart() {
+        val source = File("src/main/java/com/company/vehiclevoice/MainActivity.kt").readText()
+
+        assertTrue(source.contains("eventIntent?.action == Intent.ACTION_MAIN"))
+        assertTrue(source.contains("Intent.CATEGORY_LAUNCHER"))
+        assertTrue(source.contains("Rejected non-launcher MainActivity start"))
+        assertTrue(source.contains("moveTaskToBack(true)"))
+        assertTrue(source.contains("PREF_ACTIVITY_HISTORY"))
+    }
+
+    @Test
+    fun foregroundService_redeliversConfigurationAndRecoversUnexpectedPipelineStops() {
+        val service = File("src/main/java/com/company/vehiclevoice/VoiceForegroundService.kt").readText()
+        val audio = File("src/main/java/com/company/vehiclevoice/audio/AndroidAudioRecordSource.kt").readText()
+
+        assertTrue(service.contains("return START_REDELIVER_INTENT"))
+        assertFalse(service.contains("return START_STICKY"))
+        assertTrue(service.contains("intent == null"))
+        assertTrue(service.contains("checkPipelineHealth()"))
+        assertTrue(service.contains("MAX_RECOVERY_ATTEMPTS = 3"))
+        assertTrue(service.contains("keys = VehicleRedisKeys.fourQueryKeys"))
+        assertTrue(audio.contains("check(count > 0)"))
+    }
 }

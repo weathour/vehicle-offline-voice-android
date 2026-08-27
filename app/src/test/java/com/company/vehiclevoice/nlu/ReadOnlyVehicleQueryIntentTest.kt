@@ -190,19 +190,15 @@ class ReadOnlyVehicleQueryIntentTest {
     }
 
     @Test
-    fun sixQueryClosedSetAcceptsBroadButDistinctivePhrases() {
-        val closedSet = RuleIntentParser(allowedIntentNames = RuleIntentParser.SIX_QUERY_INTENTS)
+    fun fourQueryClosedSetAcceptsBroadButDistinctivePhrases() {
+        val closedSet = RuleIntentParser(allowedIntentNames = RuleIntentParser.FOUR_QUERY_INTENTS)
         val cases = mapOf(
             "车素" to "vehicle_speed_query",
             "现在跑多快" to "vehicle_speed_query",
-            "店量" to "vehicle_battery_query",
-            "艾斯欧西" to "vehicle_battery_query",
             "张碍物情况" to "vehicle_obstacle_query",
             "最近障碍物" to "vehicle_obstacle_query",
             "协同模块状态" to "vehicle_sam_status_query",
             "山姆反馈" to "vehicle_sam_status_query",
-            "归迹点" to "vehicle_trajectory_query",
-            "规划轨迹有多少点" to "vehicle_trajectory_query",
             "红女灯状态" to "vehicle_traffic_light_query",
             "信号等" to "vehicle_traffic_light_query"
         )
@@ -213,11 +209,12 @@ class ReadOnlyVehicleQueryIntentTest {
     }
 
     @Test
-    fun sixQueryClosedSetRejectsSingleSoundsCollisionsAndRemovedTopics() {
-        val closedSet = RuleIntentParser(allowedIntentNames = RuleIntentParser.SIX_QUERY_INTENTS)
+    fun fourQueryClosedSetRejectsSingleSoundsCollisionsAndRemovedTopics() {
+        val closedSet = RuleIntentParser(allowedIntentNames = RuleIntentParser.FOUR_QUERY_INTENTS)
 
         listOf(
             "u", "a", "ou", "灯", "电", "点", "状态",
+            "电量多少", "店量", "规划轨迹有多少点", "归迹点",
             "续航多少", "电压多少", "车道线状态", "当前位置", "协作场景是什么"
         ).forEach { text ->
             assertEquals(text, "fallback", closedSet.parse(text).intent.name)

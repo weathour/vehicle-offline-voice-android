@@ -69,6 +69,14 @@ object VehicleRedisKeys {
         SAM
     )
 
+    val fourQueryKeys: List<String> = listOf(
+        LOCATION,
+        SPEED,
+        OBSTACLES,
+        SAM,
+        TRAFFIC_LIGHTS
+    )
+
     val aliases: Map<String, List<String>> = mapOf(
         RANGE to listOf(RANGE_LEGACY),
         TRAFFIC_LIGHTS to listOf(TRAFFIC_LIGHTS_LEGACY),

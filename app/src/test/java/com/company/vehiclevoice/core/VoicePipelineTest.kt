@@ -238,10 +238,10 @@ class VoicePipelineTest {
                 alternatives = listOf(
                     AsrAlternative("车 速 多 少", 100.0),
                     AsrAlternative("车 素 多 少", 99.8),
-                    AsrAlternative("电 量 多 少", 99.7)
+                    AsrAlternative("障 碍 物 情 况", 99.7)
                 )
             ),
-            RuleIntentParser(allowedIntentNames = RuleIntentParser.SIX_QUERY_INTENTS)
+            RuleIntentParser(allowedIntentNames = RuleIntentParser.FOUR_QUERY_INTENTS)
         )
 
         assertEquals("vehicle_speed_query", result.intent.name)
@@ -256,10 +256,10 @@ class VoicePipelineTest {
                 confidence = 100.0,
                 alternatives = listOf(
                     AsrAlternative("车 速 多 少", 100.0),
-                    AsrAlternative("电 量 多 少", 99.9)
+                    AsrAlternative("障 碍 物 情 况", 99.9)
                 )
             ),
-            RuleIntentParser(allowedIntentNames = RuleIntentParser.SIX_QUERY_INTENTS)
+            RuleIntentParser(allowedIntentNames = RuleIntentParser.FOUR_QUERY_INTENTS)
         )
 
         assertEquals("fallback", result.intent.name)

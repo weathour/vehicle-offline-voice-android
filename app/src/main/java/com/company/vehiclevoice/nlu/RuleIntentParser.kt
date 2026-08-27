@@ -226,12 +226,10 @@ class RuleIntentParser(
     }
 
     companion object {
-        val SIX_QUERY_INTENTS = setOf(
+        val FOUR_QUERY_INTENTS = setOf(
             "vehicle_speed_query",
-            "vehicle_battery_query",
             "vehicle_obstacle_query",
             "vehicle_sam_status_query",
-            "vehicle_trajectory_query",
             "vehicle_traffic_light_query"
         )
 

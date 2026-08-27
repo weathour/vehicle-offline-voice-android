@@ -4,4 +4,6 @@
     <string name="voice_service_channel_name">渝行智声语音服务</string>
     <string name="voice_service_notification_title">渝行智声正在运行</string>
     <string name="voice_service_notification_text">离线识别正在运行，播报使用当前 TTS 设置。</string>
+    <string name="voice_service_notification_recovering">语音监听异常，正在恢复（%1$d/%2$d）</string>
+    <string name="voice_service_notification_failed">语音监听恢复失败，请打开应用重新启动。</string>
 </resources>

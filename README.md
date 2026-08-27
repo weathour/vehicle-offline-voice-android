@@ -1,13 +1,15 @@
 # 渝行智声车载语音交互软件
 
-“渝行智声”v1.5 面向手机和车载 Android 终端。设备连接车辆只读 Redis 数据源后，可用离线语音识别查询车速、电量、障碍物、协同模块、规划轨迹点和红绿灯，并通过可选 TTS 播报回答。
+“渝行智声”v1.6 面向手机和车载 Android 终端。设备连接车辆只读 Redis 数据源后，可用离线语音识别查询车速、障碍物、协同模块和红绿灯，并通过可选 TTS 播报回答。
 
 著作权人：长安大学。主要开发人员：杨兴杰、陈婷、徐志刚、王嘉鑫、申丹丹。正式包名：`cn.edu.chd.yuxingvoice`。
 
 ## 当前能力
 
 - 唤醒词、VAD、Vosk ASR 和规则 NLU 全部离线运行。
-- 正式语音入口仅开放六类只读查询；领域语法覆盖常见错字、同音和近音结果，同时拒绝单个元音、单字及冲突问法。
+- 正式语音入口仅开放四类只读查询；领域语法覆盖常见错字、同音和近音结果，同时拒绝单个元音、单字及冲突问法。
+- 启动真实语音服务后主界面自动退到后台；Release 版拒绝缺少启动器语义的直接 Activity 拉起。
+- 后台服务使用启动 Intent 重投递恢复真实配置，录音流水线异常退出时最多自动恢复三次。
 - 可选 Edge、百度、腾讯云三种在线 TTS，或设备自带的 Android 系统 TTS。
 - Edge 默认免注册；百度和腾讯云通过用户提供的 JSON 配置启用，密钥导入后由 Android Keystore 加密保存，不进入 APK、日志或普通偏好设置。
 - 在线 TTS 失败时自动尝试系统 TTS；仍不可用时播放固定 WAV 提示。
@@ -26,7 +28,7 @@
    - **Android 系统语音**：设备已安装中文 TTS 时可用。
 4. 点击 **试听当前语音**。
 5. 点击 **检测车辆数据连接**，确认 `connected=true` 且解码状态正常。
-6. 点击 **启动语音服务**，询问车速、电量、障碍物、协同模块、规划轨迹点或红绿灯。
+6. 点击 **启动语音服务**，应用自动进入后台；可询问车速、障碍物、协同模块或红绿灯。
 
 ## TTS 配置文件
 
@@ -75,12 +77,12 @@ Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。
 - `INTERNET` 权限用于只读 Redis 和所选在线 TTS；ASR 音频不会上传。
 - 选择在线 TTS 时，本次要播报的回答文字会发送给对应供应商。
 - Edge 无需密钥；百度、腾讯云凭据必须由使用者自行注册和管理。本仓库与 Release 均不包含真实 API 密钥。
-- Vosk restricted grammar 暂不启用；中文整句 grammar 会导致 `[unk]`，当前采用开放 ASR 加 NLU 领域纠错。
+- 正式麦克风链路启用四类分词 restricted grammar，并结合 N-best 与 NLU 领域纠错处理常见近音结果。
 
 ## 文档入口
 
 - 架构说明：[`docs/architecture.md`](docs/architecture.md)
-- v1.5 发布说明：[`docs/releases/v1.5-six-query-tablet-ui.md`](docs/releases/v1.5-six-query-tablet-ui.md)
+- v1.6 发布说明：[`docs/releases/v1.6-four-query-background-stability.md`](docs/releases/v1.6-four-query-background-stability.md)
 - 开发环境：[`docs/development-environment.md`](docs/development-environment.md)
 - 语音链路：[`docs/voice-pipeline.md`](docs/voice-pipeline.md)
 - 第三方软件：[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)

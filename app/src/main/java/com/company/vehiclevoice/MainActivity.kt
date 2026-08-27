@@ -27,6 +27,7 @@ import android.widget.TextView
 import com.company.vehiclevoice.data.readonly.RedisVehicleSnapshotProvider
 import com.company.vehiclevoice.data.readonly.VehicleDataSourceMode
 import com.company.vehiclevoice.data.readonly.VehicleDataSourceRuntimeConfig
+import com.company.vehiclevoice.data.readonly.VehicleRedisKeys
 import com.company.vehiclevoice.core.VoiceRuntimeMode
 import com.company.vehiclevoice.data.readonly.SocketRedisBinaryDataSource
 import com.company.vehiclevoice.data.readonly.SocketRedisConfig
@@ -60,6 +61,7 @@ class MainActivity : Activity() {
     private lateinit var redisDbInput: EditText
     private lateinit var redisPasswordInput: EditText
     private lateinit var connectionPanel: TextView
+    private lateinit var launchPanel: TextView
     private lateinit var spokenTextPanel: TextView
     private lateinit var ttsConfigStatus: TextView
     private val ttsRadioButtons = linkedMapOf<TtsProvider, RadioButton>()
@@ -77,6 +79,14 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val allowedLaunch = isAllowedLaunch(intent)
+        recordActivityEvent("create", intent, allowedLaunch)
+        if (!allowedLaunch) {
+            VoiceLogger.warn("Rejected non-launcher MainActivity start in release build")
+            if (intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0) moveTaskToBack(true)
+            finish()
+            return
+        }
         setContentView(buildContentView())
         appendLog("${getString(R.string.app_name)}已启动。")
         appendLog("语音服务已就绪，识别离线运行，播报使用当前 TTS 设置。")
@@ -84,12 +94,31 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        recordActivityEvent("resume", intent, true)
         UiLogBus.addListener(serviceLogListener)
     }
 
     override fun onPause() {
+        recordActivityEvent("pause", intent, true)
         UiLogBus.removeListener(serviceLogListener)
         super.onPause()
+    }
+
+    override fun onStop() {
+        recordActivityEvent("stop", intent, true)
+        super.onStop()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val allowedLaunch = isAllowedLaunch(intent)
+        recordActivityEvent("new_intent", intent, allowedLaunch)
+        if (!allowedLaunch) {
+            VoiceLogger.warn("Rejected non-launcher MainActivity new intent in release build")
+            moveTaskToBack(true)
+            return
+        }
+        setIntent(intent)
     }
 
     private fun buildContentView(): ScrollView {
@@ -246,6 +275,8 @@ class MainActivity : Activity() {
         addView(connectionPanel, sectionParams(8))
         asrPanel = debugLine("最近听到", "尚无识别结果")
         addView(asrPanel, sectionParams(6))
+        launchPanel = debugLine("界面事件", loadLastActivityEvent())
+        addView(launchPanel, sectionParams(6))
     }
 
     private fun buildRedisConfigPanel(): LinearLayout {
@@ -381,7 +412,7 @@ class MainActivity : Activity() {
         }
         panel.addView(sectionTitle("可问内容"))
         panel.addView(
-            supportingText("唤醒后可换一种说法询问以下六类信息，识别不确定时软件会请你重新说。"),
+            supportingText("唤醒后可换一种说法询问以下四类信息，识别不确定时软件会请你重新说。"),
             sectionParams(4)
         )
         panel.addView(TextView(this).apply {
@@ -643,7 +674,53 @@ class MainActivity : Activity() {
                 "语音：${selectedTtsName()}"
         )
         showStatus("启动命令已发送，正在准备服务")
+        if (mode == VoiceRuntimeMode.RealMicManual) {
+            recordActivityEvent("service_started_backgrounding", intent, true)
+            VoiceLogger.info("MainActivity moved to background after service start result=${moveTaskToBack(true)}")
+        }
     }
+
+    private fun isAllowedLaunch(eventIntent: Intent?): Boolean = isDebugBuild ||
+        (eventIntent?.action == Intent.ACTION_MAIN && eventIntent.categories?.contains(Intent.CATEGORY_LAUNCHER) == true)
+
+    private fun recordActivityEvent(stage: String, eventIntent: Intent?, allowed: Boolean) {
+        val line = buildString {
+            append(System.currentTimeMillis())
+            append(" stage=").append(stage)
+            append(" allowed=").append(allowed)
+            append(" action=").append(eventIntent?.action ?: "none")
+            append(" categories=").append(eventIntent?.categories?.sorted()?.joinToString("|") ?: "none")
+            append(" flags=0x").append(Integer.toHexString(eventIntent?.flags ?: 0))
+            append(" referrer=").append(referrer ?: "none")
+            append(" caller=").append(callingPackage ?: "none")
+            append(" task=").append(taskId)
+            append(" root=").append(isTaskRoot)
+        }
+        val preferences = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val history = preferences.getString(PREF_ACTIVITY_HISTORY, "")
+            .orEmpty()
+            .lineSequence()
+            .filter { it.isNotBlank() }
+            .toList()
+            .takeLast(MAX_ACTIVITY_EVENTS - 1)
+            .plus(line)
+            .joinToString("\n")
+        preferences.edit().putString(PREF_ACTIVITY_HISTORY, history).apply()
+        VoiceLogger.info("Activity event $line")
+        UiLogBus.publish("Activity event $line")
+        if (::launchPanel.isInitialized) {
+            launchPanel.text = "界面事件：\n${history.lines().takeLast(VISIBLE_ACTIVITY_EVENTS).joinToString("\n")}"
+        }
+    }
+
+    private fun loadLastActivityEvent(): String = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        .getString(PREF_ACTIVITY_HISTORY, "")
+        .orEmpty()
+        .lines()
+        .filter { it.isNotBlank() }
+        .takeLast(VISIBLE_ACTIVITY_EVENTS)
+        .joinToString("\n")
+        .ifBlank { "暂无记录" }
 
     private fun previewTts(button: Button) {
         val provider = selectedTtsProvider()
@@ -729,6 +806,7 @@ class MainActivity : Activity() {
                             timeoutMs = config.timeoutMs
                         )
                     ),
+                    keys = VehicleRedisKeys.fourQueryKeys,
                     snapshotDeadlineMs = config.snapshotDeadlineMs
                 )
                 provider.readSnapshot()
@@ -740,21 +818,33 @@ class MainActivity : Activity() {
                     val decoded = snapshot.keyStatuses.values.count { it.decoded }
                     val missing = snapshot.keyStatuses.values.count { !it.present }
                     val errors = snapshot.keyStatuses.values.count { it.present && !it.decoded }
+                    val availability = linkedMapOf(
+                        "车速" to (snapshot.speedKmh != null),
+                        "障碍物" to (snapshot.obstacleCount != null || snapshot.nearestObstacle != null),
+                        "协同模块" to (snapshot.cooperativeState != null),
+                        "红绿灯" to (snapshot.trafficLight?.color != null)
+                    )
+                    val availableCount = availability.values.count { it }
+                    val unavailable = availability.filterValues { !it }.keys.joinToString("、")
                     val basic = listOfNotNull(
                         snapshot.speedKmh?.let { "车速${it}km/h" },
-                        snapshot.gear?.let { "档位$it" },
-                        snapshot.batterySocPercent?.let { "电量${it}%" },
+                        snapshot.obstacleCount?.let { "障碍物${it}个" },
+                        snapshot.trafficLight?.color?.let { "交通灯$it" },
                         snapshot.cooperativeState?.summary
                     ).joinToString("，").ifBlank { "暂无摘要" }
                     val connected = snapshot.diagnostics.connected
-                    val message = "车辆连接：${if (connected) "已连接" else "异常"}；已解码 $decoded，缺失 $missing，解码失败 $errors\n$basic"
+                    val message = buildString {
+                        append("车辆连接：${if (connected) "已连接" else "异常"}；四类数据可用 $availableCount/4")
+                        if (unavailable.isNotBlank()) append("；不可用：$unavailable")
+                        append("\n$basic")
+                    }
                     connectionPanel.text = message
                     vehiclePanel.text = "只读车况：${snapshot.diagnostics.detail} decoded=$decoded missing=$missing error=$errors"
                     cooperationPanel.text = "协作信息：${snapshot.cooperativeState?.summary ?: "未读取"}"
                     when {
                         !connected -> showStatus("Redis 连接异常，请检查网络和配置", StatusTone.Error)
-                        decoded == 0 || errors > 0 || missing > 0 ->
-                            showStatus("已连接 Redis，但车辆数据不完整（已解码 $decoded）", StatusTone.Warning)
+                        availableCount < 4 ->
+                            showStatus("已连接 Redis，四类数据可用 $availableCount/4", StatusTone.Warning)
                         else -> showStatus("车辆数据连接正常，可以启动语音服务", StatusTone.Success)
                     }
                     appendLog(message)
@@ -937,6 +1027,9 @@ class MainActivity : Activity() {
         private const val PREF_REDIS_PASSWORD = "redis_password"
         private const val PREF_TTS_PROVIDER = "tts_provider"
         private const val PREF_SYSTEM_TTS = "prefer_system_tts"
+        private const val PREF_ACTIVITY_HISTORY = "activity_history"
+        private const val MAX_ACTIVITY_EVENTS = 20
+        private const val VISIBLE_ACTIVITY_EVENTS = 4
         private const val REQUEST_TTS_CONFIG = 43
         private const val TTS_PREVIEW_TEXT =
             "语音测试。当前车速三十二公里每小时，V2X connection is ready，Redis data is normal。"

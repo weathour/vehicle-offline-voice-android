@@ -47,7 +47,7 @@ class AndroidAudioRecordSource(
         val record = audioRecord ?: return null
         val buffer = ShortArray(frameSamples)
         val count = record.read(buffer, 0, buffer.size)
-        if (count <= 0) return null
+        check(count > 0) { "AudioRecord read failed with code $count" }
         val samples = if (count == buffer.size) buffer else buffer.copyOf(count)
         return PcmFrame(
             samples = samples,
